@@ -4,6 +4,7 @@ import {
   CAUGHT_TIME, INTRO_TIME, type GameState, type Input,
 } from '../../src/game/state';
 import { botInput } from '../../src/game/bot';
+import { beginBossFight } from '../../src/game/boss';
 import type { KeyColor } from '../../src/game/types';
 import { START } from '../../src/game/levels';
 
@@ -17,7 +18,7 @@ function skipIntro(s: GameState) {
 
 function run(s: GameState, seconds: number, input: (s: GameState) => Input) {
   const events: string[] = [];
-  for (let t = 0; t < seconds && s.status !== 'won' && s.status !== 'gameover'; t += DT) {
+  for (let t = 0; t < seconds && s.status !== 'won' && s.status !== 'gameover' && s.status !== 'bossIntro'; t += DT) {
     update(s, input(s), DT);
     events.push(...s.events.map((e) => e.type));
   }
@@ -255,10 +256,14 @@ describe('family members', () => {
 });
 
 describe('full escape', () => {
-  it('the autopilot collects every key across all floors and escapes through the front door', () => {
+  it('the autopilot collects every key across all floors, gets out the front door and beats the boss', () => {
     const s = createGame('normal', { noFamily: true });
     skipIntro(s);
-    const ev = run(s, 240, botInput);
+    let ev = run(s, 240, botInput);
+    expect(s.status).toBe('bossIntro');
+    beginBossFight(s);
+    ev = ev.concat(run(s, 120, botInput));
+    expect(ev).toContain('bossDown');
     expect(s.status).toBe('won');
     expect(ev.filter((e) => e === 'key')).toHaveLength(8);
     expect(ev.filter((e) => e === 'unlock')).toHaveLength(8);

@@ -1,9 +1,10 @@
 import './style.css';
 import { createGame, currentObjective, update, type GameEvent, type GameOptions, type GameState } from './game/state';
 import { botInput } from './game/bot';
+import { beginBossFight, makeBoss, ENTRY } from './game/boss';
 import { KEY_INFO, type Difficulty } from './game/types';
 import { Scene } from './render/scene';
-import { CUTSCENE_LENGTH } from './render/cutscene';
+import { CUTSCENE_LENGTH, BOSS_INTRO_LENGTH } from './render/cutscene';
 import { drawNuggetPortrait } from './render/paint';
 import { Sound } from './audio/sound';
 import { Controls } from './input';
@@ -13,7 +14,7 @@ const STEP = 1 / 60;
 const params = new URLSearchParams(location.search);
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-type Mode = 'menu' | 'cutscene' | 'game' | 'paused' | 'ended';
+type Mode = 'menu' | 'cutscene' | 'bossCutscene' | 'game' | 'paused' | 'ended';
 
 function fmtTime(s: number) {
   const m = Math.floor(s / 60);
@@ -52,14 +53,19 @@ function wantLowFx() {
   }
 }
 
+/** Phones and tablets: lighter lighting so the game stays smooth. */
+function isPhone() {
+  return matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 async function boot() {
-  const scene = new Scene($('stage'), { lowFx: wantLowFx() });
+  const scene = new Scene($('stage'), { lowFx: wantLowFx(), phone: isPhone() });
   const sound = new Sound();
   const controls = new Controls();
   const hud = new Hud();
 
   let difficulty: Difficulty = (['easy', 'normal', 'hard'] as const).find((d) => d === params.get('difficulty')) ?? 'normal';
-  const opts: GameOptions = { noFamily: params.has('nofamily') };
+  const opts: GameOptions = { noFamily: params.has('nofamily'), noBoss: params.has('noboss') };
   const useBot = params.has('bot');
   const speed = Math.max(1, Math.min(20, Number(params.get('speed')) || 1));
 
@@ -136,14 +142,46 @@ async function boot() {
   }
 
   function endCutscene() {
+    if (mode === 'bossCutscene') return endBossCutscene();
     if (mode !== 'cutscene') return;
     $('cutscene').hidden = true;
     start(true);
     fadeIn();
   }
 
+  /** Out the front door: Uncle Gus drops in, then the boss fight starts. */
+  function playBossCutscene() {
+    scene.bossCut.reset();
+    lastCaption = '';
+    mode = 'bossCutscene';
+    controls.clear();
+    $('hud').hidden = true;
+    $('touch').hidden = true;
+    $('cutscene').hidden = false;
+    $('btn-skip').focus({ preventScroll: true });
+  }
+
+  function endBossCutscene() {
+    if (mode !== 'bossCutscene') return;
+    $('cutscene').hidden = true;
+    startBoss();
+    fadeIn();
+  }
+
+  function startBoss() {
+    const before = state.events.length;
+    beginBossFight(state);
+    for (const e of state.events.splice(before)) onEvent(e);
+    controls.clear();
+    acc = 0;
+    mode = 'game';
+    $('hud').hidden = false;
+    $('touch').hidden = !isTouch();
+  }
+
   function start(afterCutscene = false) {
     sound.unlock();
+    setBossUi(false);
     if (!afterCutscene) sound.click();
     state = createGame(difficulty, { ...opts, skipIntro: afterCutscene });
     scene.reset();
@@ -162,6 +200,7 @@ async function boot() {
 
   function toMenu() {
     mode = 'menu';
+    setBossUi(false);
     $('cutscene').hidden = true;
     sound.stopMusic();
     state = createGame(difficulty, opts);
@@ -185,6 +224,37 @@ async function boot() {
       controls.clear();
       sound.startMusic();
     }
+  }
+
+  function setBossUi(on: boolean) {
+    document.body.classList.toggle('boss', on);
+    $('boss-hud').hidden = !on;
+    $('fire-btn').hidden = !on;
+  }
+
+  // Pause when the tab or app goes to the background (phones lock, calls come in…).
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && mode === 'game') togglePause();
+  });
+  // iOS Safari: no pinch zoom or double-tap zoom in the middle of a chase.
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = performance.now();
+    if (now - lastTouchEnd < 320 && (e.target as HTMLElement).closest('#stage, #touch')) e.preventDefault();
+    lastTouchEnd = now;
+  }, { passive: false });
+
+  // Full screen (Android and desktop; iPhone Safari has no full screen API, use Add to Home Screen).
+  const fullBtn = $('btn-full');
+  const docEl = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
+  if (docEl.requestFullscreen || docEl.webkitRequestFullscreen) {
+    fullBtn.hidden = false;
+    fullBtn.addEventListener('click', () => {
+      if (document.fullscreenElement) void document.exitFullscreen?.();
+      else if (docEl.requestFullscreen) void docEl.requestFullscreen({ navigationUI: 'hide' }).catch(() => undefined);
+      else docEl.webkitRequestFullscreen?.();
+    });
   }
 
   const soundBtn = $('btn-sound');
@@ -225,9 +295,11 @@ async function boot() {
   controls.onHint = hint;
   controls.onAnyKey = () => sound.unlock();
   controls.bindTouch($('stick'), $('stick-knob'), $('dash-btn'));
+  controls.bindFire($('fire-btn'));
+  controls.bindMouse($('stage'));
   window.addEventListener('keydown', (e) => {
     if (mode === 'menu' && e.code === 'Enter') playCutscene();
-    else if (mode === 'cutscene' && (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter')) {
+    else if ((mode === 'cutscene' || mode === 'bossCutscene') && (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter')) {
       e.preventDefault();
       endCutscene();
     }
@@ -290,6 +362,39 @@ async function boot() {
       case 'dash':
         sound.dash();
         break;
+      case 'bossIntro':
+        if (useBot) startBoss();
+        else playBossCutscene();
+        break;
+      case 'bossStart':
+        setBossUi(true);
+        hud.banner('Uncle Gus!');
+        hud.toast(isTouch() ? 'Hold <b>SQUIRT</b> to fire ketchup!' : 'Hold <b>F</b> or the mouse button to squirt ketchup!', '', 3600);
+        break;
+      case 'squirt':
+        sound.squirt();
+        break;
+      case 'bossHit':
+        sound.splat();
+        break;
+      case 'throw':
+        sound.whoosh();
+        break;
+      case 'slam':
+        sound.thud();
+        break;
+      case 'refill':
+        sound.refill();
+        break;
+      case 'hurt':
+        sound.caught();
+        hud.toast(state.lives > 0 ? `Ouch! ${state.lives} ${state.lives === 1 ? 'life' : 'lives'} left.` : 'Ouch!', 'danger', 1800);
+        break;
+      case 'bossDown':
+        sound.bossDown();
+        hud.toast('Uncle Gus is out of the game! You\'re free!', '', 3000);
+        $('fire-btn').hidden = true;
+        break;
       case 'win': {
         sound.win();
         sound.stopMusic();
@@ -313,7 +418,9 @@ async function boot() {
         sound.gameOver();
         sound.stopMusic();
         mode = 'ended';
-        $('over-text').textContent = `${state.caughtBy ?? 'The family'} caught you one time too many. Try sneaking and hiding under furniture!`;
+        $('over-text').textContent = state.boss
+          ? 'Uncle Gus got you! Keep moving, dodge the drumsticks and jump away from his belly slam.'
+          : `${state.caughtBy ?? 'The family'} caught you one time too many. Try sneaking and hiding under furniture!`;
         $('touch').hidden = true;
         show('screen-over');
         break;
@@ -327,13 +434,17 @@ async function boot() {
   const bar = $('cutscene-progress');
   let lastCaption = '';
   function cutsceneFrame(dt: number) {
-    const cs = scene.cutscene;
+    const boss = mode === 'bossCutscene';
+    const cs = boss ? scene.bossCut : scene.cutscene;
     for (const e of cs.events) {
       if (e === 'gasp') sound.alert();
       else if (e === 'jump') sound.dash();
       else if (e === 'land') sound.step_();
       else if (e === 'bark') sound.lost();
       else if (e === 'pop') sound.click();
+      else if (e === 'thud') sound.thud();
+      else if (e === 'chomp') sound.step_();
+      else if (e === 'squirt') sound.squirt();
     }
     const c = cs.caption;
     const key = c ? c.who + c.text : '';
@@ -349,7 +460,7 @@ async function boot() {
         caption.classList.add('in');
       }
     }
-    bar.style.transform = `scaleX(${cs.t / CUTSCENE_LENGTH})`;
+    bar.style.transform = `scaleX(${cs.t / (boss ? BOSS_INTRO_LENGTH : CUTSCENE_LENGTH)})`;
     $('cutscene').style.setProperty('--fade', String(cs.fade));
     if (cs.done) endCutscene();
     void dt;
@@ -373,12 +484,12 @@ async function boot() {
         stepTimer -= dt;
         if (stepTimer <= 0) { sound.step_(); stepTimer = state.player.dashTime > 0 ? 0.08 : 0.17; }
       }
-      sound.intensity = state.chasers.some((c) => c.floor === state.player.floor && (c.mode === 'chase' || c.mode === 'alert')) ? 1 : 0;
+      sound.intensity = state.boss && state.status === 'boss' ? 1 : state.chasers.some((c) => c.floor === state.player.floor && (c.mode === 'chase' || c.mode === 'alert')) ? 1 : 0;
       scene.render(state, dt, 'game');
       hud.update(state);
-    } else if (mode === 'cutscene') {
-      scene.render(state, dt * speed, 'cutscene');
-      cutsceneFrame(dt);
+    } else if (mode === 'cutscene' || mode === 'bossCutscene') {
+      scene.render(state, dt * speed, mode === 'cutscene' ? 'cutscene' : 'bossIntro');
+      if (mode === 'bossCutscene' || mode === 'cutscene') cutsceneFrame(dt);
     } else {
       scene.render(state, dt, mode === 'menu' ? 'menu' : 'game');
     }
@@ -389,11 +500,22 @@ async function boot() {
   (window as unknown as { __nugget: unknown }).__nugget = {
     get state() { return state; },
     get mode() { return mode; },
-    get cutsceneTime() { return scene.cutscene.t; },
+    get cutsceneTime() { return mode === 'bossCutscene' ? scene.bossCut.t : scene.cutscene.t; },
     start: () => start(),
     playCutscene,
     skipCutscene: endCutscene,
-    seekCutscene: (t: number) => { scene.cutscene.t = t; },
+    seekCutscene: (t: number) => { if (mode === 'bossCutscene') scene.bossCut.t = t; else scene.cutscene.t = t; },
+    /** Jump straight to the front door, as if every key had been found. */
+    toFrontDoor: () => {
+      if (mode !== 'game') start();
+      for (const k of state.keys) { state.held.add(k.color); state.unlocked.add(k.color); }
+      state.player.floor = 0;
+      state.player.pos = { ...ENTRY };
+      state.status = 'bossIntro';
+      state.boss = makeBoss(state);
+      state.shots = [];
+      onEvent({ type: 'bossIntro' });
+    },
     toMenu,
   };
 

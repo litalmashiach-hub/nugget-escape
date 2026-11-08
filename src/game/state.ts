@@ -2,6 +2,7 @@ import { FLOORS, START } from './levels';
 import { buildMaps, type FloorMap } from './map';
 import { findPath } from './path';
 import { canSee, angleDiff } from './vision';
+import { makeBoss, updateBossFight, ENTRY, BOSS_NAME, type Boss, type Shot } from './boss';
 import {
   DIFFICULTY, KEY_INFO, KEY_ORDER,
   type Difficulty, type DifficultySettings, type FamilyDef, type FloorDef, type KeyColor, type Vec,
@@ -22,6 +23,8 @@ export interface Input {
   my: number;
   /** True only on the frame dash was pressed. */
   dash: boolean;
+  /** Held down to squirt ketchup (boss fight only). */
+  fire?: boolean;
 }
 
 export type GameEvent =
@@ -35,7 +38,16 @@ export type GameEvent =
   | { type: 'dash' }
   | { type: 'respawn' }
   | { type: 'win' }
-  | { type: 'gameover' };
+  | { type: 'gameover' }
+  | { type: 'bossIntro' }
+  | { type: 'bossStart' }
+  | { type: 'squirt' }
+  | { type: 'bossHit'; x: number; y: number; hp: number }
+  | { type: 'bossDown' }
+  | { type: 'throw' }
+  | { type: 'slam'; x: number; y: number }
+  | { type: 'hurt' }
+  | { type: 'refill' };
 
 export type ChaserMode = 'patrol' | 'alert' | 'chase' | 'search' | 'return';
 
@@ -68,6 +80,7 @@ export interface Player {
   dashCd: number;
   invuln: number;
   walkPhase: number;
+  fireCd: number;
   /** Stairs ignore the nugget right after arriving until the player lets go or turns. */
   stairsArmed: boolean;
   arriveDir: Vec;
@@ -81,10 +94,12 @@ export interface KeyItem {
   taken: boolean;
 }
 
-export type Status = 'intro' | 'playing' | 'caught' | 'won' | 'gameover';
+export type Status = 'intro' | 'playing' | 'caught' | 'bossIntro' | 'boss' | 'won' | 'gameover';
 
 export interface GameOptions {
   noFamily?: boolean;
+  /** Escaping through the front door wins at once (no boss fight). */
+  noBoss?: boolean;
   /** Start playing at once (the opening cutscene already showed the nugget hopping off the plate). */
   skipIntro?: boolean;
   floors?: FloorDef[];
@@ -109,6 +124,14 @@ export interface GameState {
   events: GameEvent[];
   lockedCd: number;
   caughtBy: string | null;
+  noBoss: boolean;
+  /** Uncle Gus, once the nugget is out of the front door. */
+  boss: Boss | null;
+  /** Flying ketchup and drumsticks during the boss fight. */
+  shots: Shot[];
+  /** Squirts left in the ketchup bottle, and how far an empty bottle has refilled (seconds). */
+  ketchup: number;
+  refill: number;
 }
 
 const makeChaser = (def: FamilyDef, floor: number): Chaser => ({
@@ -148,6 +171,7 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
       dashCd: 0,
       invuln: 0,
       walkPhase: 0,
+      fireCd: 0,
       stairsArmed: true,
       arriveDir: { x: 0, y: 0 },
     },
@@ -165,6 +189,11 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
     events: [],
     lockedCd: 0,
     caughtBy: null,
+    noBoss: !!opts.noBoss,
+    boss: null,
+    shots: [],
+    ketchup: 0,
+    refill: 0,
   };
 }
 
@@ -255,7 +284,7 @@ export function findDoor(state: GameState, color: KeyColor) {
 
 export interface Objective {
   color: KeyColor;
-  action: 'find' | 'open' | 'escape';
+  action: 'find' | 'open' | 'escape' | 'boss';
   text: string;
   hint: string;
 }
@@ -263,7 +292,10 @@ export interface Objective {
 export function currentObjective(state: GameState): Objective | null {
   for (const color of KEY_ORDER) {
     if (state.unlocked.has(color)) {
-      if (color === 'gold') return { color, action: 'escape', text: 'Run out the front door!', hint: 'The front door is open. Run outside to freedom!' };
+      if (color === 'gold') {
+        if (state.boss) return { color, action: 'boss', text: `Squirt ketchup at ${BOSS_NAME}!`, hint: `Dodge the flying drumsticks, stay out of the red ring when ${BOSS_NAME} jumps, and keep squirting ketchup!` };
+        return { color, action: 'escape', text: 'Run out the front door!', hint: 'The front door is open. Run outside to freedom!' };
+      }
       continue;
     }
     const label = KEY_INFO[color].label;
@@ -292,7 +324,11 @@ export function currentObjective(state: GameState): Objective | null {
 
 export function update(state: GameState, input: Input, dt: number) {
   state.events = [];
-  if (state.status === 'won' || state.status === 'gameover') return;
+  if (state.status === 'won' || state.status === 'gameover' || state.status === 'bossIntro') return;
+  if (state.status === 'boss') {
+    updateBossFight(state, input, dt);
+    return;
+  }
 
   if (state.status === 'intro') {
     state.statusTimer -= dt;
@@ -388,8 +424,19 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
   // Escape through the front door
   const door = map.door(tx, ty);
   if (door && door.color === 'gold' && state.unlocked.has('gold') && p.pos.y > ty + 0.45) {
-    state.status = 'won';
-    state.events.push({ type: 'win' });
+    if (state.noBoss) {
+      state.status = 'won';
+      state.events.push({ type: 'win' });
+    } else {
+      // Out in the front garden... but someone is waiting there.
+      state.status = 'bossIntro';
+      state.boss = makeBoss(state);
+      state.shots = [];
+      p.pos = { x: ENTRY.x, y: ENTRY.y };
+      p.facing = Math.PI / 2;
+      p.moving = false;
+      state.events.push({ type: 'bossIntro' });
+    }
     return;
   }
 

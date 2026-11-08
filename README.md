@@ -6,12 +6,19 @@ A polished, all-ages 3D browser game built with **Three.js (WebGL)** and **TypeS
 
 It opens with a short cutscene: the family is at dinner, Dad lifts the nugget to his mouth, it blinks awake, jumps off his fork and runs. Press **Skip**, Space, Enter or Esc to jump straight to the game.
 
+Out the front door, a second cutscene: **Uncle Gus** jumps in front of you, munching a bucket of fried chicken, and wants you for dessert. The nugget pulls out a **ketchup bottle** and the boss fight begins. Squirt ketchup at Gus (it aims itself), dodge his flying drumsticks, and get out of the red ring when he jumps for a belly slam. The bottle holds 8 squirts and refills on its own when empty.
+
+## Play on a phone
+
+The game works on iPhone and Android in portrait or landscape, with a joystick and big buttons. Open the link in Safari or Chrome. For full screen, tap the full screen button (Android), or use **Share → Add to Home Screen** (iPhone) to get a Nugget Escape icon that opens without the browser bars.
+
 ## How to play
 
 | Action | Keyboard | Touch |
 | --- | --- | --- |
 | Move | WASD or arrow keys | Joystick (bottom left) |
 | Dash | Space or Shift | DASH button |
+| Squirt ketchup (boss fight) | F, J, K or Enter, or hold the mouse button | SQUIRT button |
 | Hint | H | **?** button |
 | Pause | P or Esc | Pause button |
 | Sound on/off | M | Speaker button |
@@ -61,7 +68,7 @@ npm run build        # production build in dist/
 npm run build:single # one self-contained HTML file in dist-single/
 ```
 
-Handy URL options for testing: `?autostart` (skips the cutscene), `?cutscene` (plays it right away), `?difficulty=easy|normal|hard`, `?nofamily`, `?bot` (autopilot), `?speed=4`.
+Handy URL options for testing: `?autostart` (skips the cutscene), `?cutscene` (plays it right away), `?difficulty=easy|normal|hard`, `?nofamily`, `?noboss` (win at the front door), `?bot` (autopilot), `?speed=4`, `?lowfx` / `?hifx` (force render quality).
 
 ## Deploying
 

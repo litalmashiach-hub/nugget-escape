@@ -132,6 +132,28 @@ test('family members catch the nugget and a life is lost', async ({ page }) => {
   await expect(page.locator('#hud-lives img.lost')).toHaveCount(1);
 });
 
+test('out the front door, Uncle Gus drops in; skipping starts the ketchup boss fight', async ({ page }) => {
+  const errors = await open(page, '?autostart&nofamily');
+  await page.evaluate(() => (window as any).__nugget.toFrontDoor());
+  await expect(page.locator('#cutscene')).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__nugget.mode)).toBe('bossCutscene');
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(3));
+  await expect(page.locator('#cutscene-who')).toHaveText('Uncle Gus');
+  await expect(page.locator('#cutscene-text')).toContainText('fried chicken');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#cutscene')).toBeHidden();
+  await expect(page.locator('#boss-hud')).toBeVisible();
+  await expect(page.locator('.boss-name')).toHaveText('Uncle Gus');
+  expect((await snap(page)).status).toBe('boss');
+  // Holding the mouse button squirts ketchup at Gus.
+  const box = (await page.locator('#stage').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForFunction(() => (window as any).__nugget.state.boss.hp < (window as any).__nugget.state.boss.maxHp, undefined, { timeout: 20_000 });
+  await page.mouse.up();
+  expect(errors).toEqual([]);
+});
+
 test('the robot player escapes the whole house and sees the win screen', async ({ page }) => {
   test.setTimeout(240_000);
   const errors = await open(page, '?autostart&nofamily&bot&speed=12');
@@ -142,6 +164,7 @@ test('the robot player escapes the whole house and sees the win screen', async (
     return s.status;
   }, { timeout: 200_000, intervals: [250] }).toBe('won');
   expect([...floors].sort()).toEqual([0, 1, 2]);
+  expect(await page.evaluate(() => (window as any).__nugget.state.boss.hp)).toBe(0);
   await expect(page.locator('#screen-win')).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('#screen-win h2')).toHaveText('You escaped!');
   await expect(page.locator('.key-slot.used')).toHaveCount(8);
@@ -166,4 +189,43 @@ test('phone: touch controls appear and nothing overflows @phone', async ({ page 
     el.dispatchEvent(new PointerEvent('pointermove', { pointerId: 7, clientX: x - 60, clientY: y, bubbles: true }));
   }, { x: stick!.x + stick!.width / 2, y: stick!.y + stick!.height / 2 });
   await page.waitForFunction((x0) => (window as any).__nugget.state.player.pos.x < x0 - 0.5, before.x);
+});
+
+test('phone: the boss fight has a big SQUIRT button that fires ketchup @phone', async ({ page }) => {
+  const errors = await open(page, '?autostart&nofamily');
+  await page.evaluate(() => (window as any).__nugget.toFrontDoor());
+  await page.locator('#btn-skip').tap();
+  await expect(page.locator('#fire-btn')).toBeVisible();
+  await expect(page.locator('#dash-btn')).toBeVisible();
+  await expect(page.locator('#stick')).toBeVisible();
+  const fire = (await page.locator('#fire-btn').boundingBox())!;
+  const dash = (await page.locator('#dash-btn').boundingBox())!;
+  const vw = page.viewportSize()!;
+  // Buttons stay on screen and do not overlap.
+  expect(fire.x + fire.width).toBeLessThanOrEqual(vw.width);
+  expect(fire.y + fire.height).toBeLessThanOrEqual(vw.height);
+  expect(dash.y + dash.height <= fire.y || dash.x + dash.width <= fire.x).toBe(true);
+  await page.evaluate(({ x, y }) => {
+    const el = document.getElementById('fire-btn')!;
+    el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 9, pointerType: 'touch', clientX: x, clientY: y, bubbles: true }));
+  }, { x: fire.x + fire.width / 2, y: fire.y + fire.height / 2 });
+  await page.waitForFunction(() => (window as any).__nugget.state.ketchup < 8, undefined, { timeout: 10_000 });
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  expect(overflow).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test('phone: playable sideways (landscape) too @phone', async ({ page }) => {
+  await page.setViewportSize({ width: 915, height: 412 });
+  await open(page, '?autostart&nofamily');
+  await expect(page.locator('#hud')).toBeVisible();
+  await page.evaluate(() => (window as any).__nugget.toFrontDoor());
+  await page.locator('#btn-skip').tap();
+  for (const id of ['#fire-btn', '#dash-btn', '#stick', '#boss-hud']) {
+    const b = (await page.locator(id).boundingBox())!;
+    expect(b.y + b.height, id).toBeLessThanOrEqual(412);
+    expect(b.y, id).toBeGreaterThanOrEqual(0);
+  }
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  expect(overflow).toBe(false);
 });

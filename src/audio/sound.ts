@@ -114,6 +114,34 @@ export class Sound {
   step_() {
     this.noise(0.03, 0.05, 1800 + Math.random() * 600);
   }
+  squirt() {
+    this.noise(0.09, 0.22, 700 + Math.random() * 200);
+    this.tone(180, 0.08, { type: 'sine', vol: 0.08, slide: 0.6 });
+  }
+  splat() {
+    this.noise(0.1, 0.3, 450);
+    this.tone(260 + Math.random() * 60, 0.12, { type: 'triangle', vol: 0.12, slide: 0.5 });
+  }
+  whoosh() {
+    this.noise(0.3, 0.2, 1500);
+  }
+  thud() {
+    if (!this.ctx) return;
+    this.tone(70, 0.5, { type: 'sine', vol: 0.5, slide: 0.5 });
+    this.noise(0.25, 0.45, 220);
+  }
+  refill() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    [440, 660].forEach((f, i) => this.tone(f, 0.12, { type: 'triangle', vol: 0.12, at: t + i * 0.06 }));
+  }
+  bossDown() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.tone(300, 0.9, { type: 'triangle', vol: 0.2, slide: 0.3, at: t });
+    this.thud();
+    [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.3, { type: 'square', vol: 0.08, at: t + 0.6 + i * 0.1 }));
+  }
   stairs() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;

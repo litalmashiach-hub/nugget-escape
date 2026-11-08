@@ -7,6 +7,7 @@ import { buildFurniture } from './furniture';
 import { drawSymbol, makeCanvas, rng, shade } from './paint';
 import type { FloorMap } from '../game/map';
 import { KEY_INFO, type FloorStyle, type KeyColor } from '../game/types';
+import { ARENA } from '../game/boss';
 
 export const WALL_H = 2.3;
 const DOOR_H = 1.9;
@@ -291,7 +292,8 @@ export function buildFloor(map: FloorMap): FloorView {
     const out = 1.6 + R() * 6;
     const x = side < 2 ? along * (map.w + 8) - 4 : side === 2 ? -out : map.w + out;
     const z = side >= 2 ? along * (map.h + 8) - 4 : side === 0 ? -out : map.h + out;
-    if (id === 0 && side === 1 && Math.abs(x - 15) < 3) continue; // keep the garden path clear
+    // keep the fenced front garden (the boss arena) clear
+    if (id === 0 && x > ARENA.x0 - 1 && x < ARENA.x1 + 1 && z > map.h - 0.5 && z < ARENA.y1 + 1) continue;
     const s = 0.8 + R() * 0.8;
     cyl(yard, x, 0, z, 0.12 * s, 1.0 * s, '#6b4a2a');
     cone(yard, x, 0.8 * s, z, 0.9 * s, 1.6 * s, shade('#2f6b3a', (R() - 0.5) * 0.3));
@@ -300,11 +302,33 @@ export function buildFloor(map: FloorMap): FloorView {
   if (id === 0) {
     const gold = map.doors.find((d) => d.color === 'gold');
     if (gold) {
-      box(yard, gold.x - 0.1, -0.01, map.h, 2.2, 0.03, 8, '#cdb89a');
-      for (let i = 0; i < 6; i++) {
-        ball(yard, gold.x - 0.6, 0.15, map.h + 1 + i * 1.2, 0.3, 0.3, 0.3, ['#f2679f', '#f5c518', '#e8424a'][i % 3]);
-        ball(yard, gold.x + 2.6, 0.15, map.h + 1.6 + i * 1.2, 0.3, 0.3, 0.3, ['#9b5de5', '#f68b2a', '#ffffff'][i % 3]);
+      box(yard, gold.x - 0.1, -0.01, map.h, 2.2, 0.03, ARENA.y1 - map.h + 4, '#cdb89a');
+      // flower beds along the house wall
+      for (let i = 0; i < 7; i++) {
+        ball(yard, ARENA.x0 + 0.5 + i * 0.8, 0.15, map.h + 0.35, 0.3, 0.3, 0.3, ['#f2679f', '#f5c518', '#e8424a'][i % 3]);
+        ball(yard, ARENA.x1 - 0.5 - i * 0.8, 0.15, map.h + 0.35, 0.3, 0.3, 0.3, ['#9b5de5', '#f68b2a', '#ffffff'][i % 3]);
       }
+      // white picket fence around the front garden, with a gate at the end of the path
+      const post = (x: number, z: number) => {
+        box(yard, x - 0.05, 0, z - 0.05, 0.1, 0.7, 0.1, '#f4f1e8');
+        cone(yard, x, 0.7, z, 0.07, 0.12, '#f4f1e8');
+      };
+      for (let x = ARENA.x0; x <= ARENA.x1 + 0.01; x += 0.4) {
+        if (Math.abs(x - (gold.x + 1)) > 1.1) post(x, ARENA.y1);
+      }
+      for (let z = map.h + 0.4; z <= ARENA.y1; z += 0.4) { post(ARENA.x0, z); post(ARENA.x1, z); }
+      for (const h of [0.25, 0.5]) {
+        box(yard, ARENA.x0, h, ARENA.y1 - 0.03, gold.x + 1 - 1.1 - ARENA.x0, 0.06, 0.06, '#f4f1e8');
+        box(yard, gold.x + 2.1, h, ARENA.y1 - 0.03, ARENA.x1 - gold.x - 2.1, 0.06, 0.06, '#f4f1e8');
+        box(yard, ARENA.x0 - 0.03, h, map.h + 0.4, 0.06, 0.06, ARENA.y1 - map.h - 0.4, '#f4f1e8');
+        box(yard, ARENA.x1 - 0.03, h, map.h + 0.4, 0.06, 0.06, ARENA.y1 - map.h - 0.4, '#f4f1e8');
+      }
+      // a picnic table and a barbecue: just past the fence, where Uncle Gus was having his feast
+      box(yard, ARENA.x1 - 3.2, 0.7, ARENA.y1 + 1.0, 2.2, 0.08, 1.0, '#8a5a36');
+      for (const [dx, dz] of [[0.15, 0.1], [2.0, 0.1], [0.15, 0.85], [2.0, 0.85]]) box(yard, ARENA.x1 - 3.2 + dx, 0, ARENA.y1 + 1.0 + dz, 0.08, 0.7, 0.08, '#5e3b22');
+      cyl(yard, ARENA.x1 - 2.1, 0.78, ARENA.y1 + 1.5, 0.2, 0.1, '#d62828');
+      cyl(yard, ARENA.x0 + 1.4, 0, ARENA.y1 + 1.6, 0.05, 0.8, '#333');
+      ball(yard, ARENA.x0 + 1.4, 0.95, ARENA.y1 + 1.6, 0.7, 0.45, 0.7, '#2d2d2d', { rough: 0.4, metal: 0.4 });
       // porch lamp
       cyl(yard, gold.x - 0.3, 0, map.h + 0.4, 0.05, 1.6, '#333');
       ball(yard, gold.x - 0.3, 1.7, map.h + 0.4, 0.22, 0.22, 0.22, '#fff2c4', { emissive: '#ffcc66', emissiveIntensity: 2 });

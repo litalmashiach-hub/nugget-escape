@@ -6,16 +6,17 @@
  * is just a matter of setting `t`.
  */
 import { THREE, canvasTexture, builder, box } from './kit';
-import { NuggetModel, PersonModel, DogModel, faceAngle } from './characters';
+import { NuggetModel, PersonModel, DogModel, BossModel, faceAngle } from './characters';
 import { bakeBubble } from './paint';
 import { START } from '../game/levels';
+import { ENTRY } from '../game/boss';
 
 export interface Caption {
   who: string;
   text: string;
 }
 
-export type CutEvent = 'gasp' | 'jump' | 'land' | 'bark' | 'pop';
+export type CutEvent = 'gasp' | 'jump' | 'land' | 'bark' | 'pop' | 'thud' | 'squirt' | 'chomp';
 
 export const CUTSCENE_LENGTH = 14.2;
 const TABLE_TOP = 0.87;
@@ -279,5 +280,113 @@ export class Cutscene {
       const headY = m instanceof PersonModel ? m.height - (1 - stand) * 0.35 + 0.35 : 1.1;
       s.bubble.position.set(s.x, headY + Math.sin(time * 6 + s.x) * 0.03, s.z);
     }
+  }
+}
+
+// ---------------------------------------------------------------- front door: Uncle Gus
+
+export const BOSS_INTRO_LENGTH = 9.6;
+const GUS_SPOT = { x: 15, y: 26.4 };
+/** Where the boss-fight camera looks at the start of the fight. */
+export const BOSS_CAM_TARGET = { x: (ENTRY.x + GUS_SPOT.x) / 2, y: (ENTRY.y + GUS_SPOT.y) / 2 };
+
+const BOSS_CAPTIONS: { a: number; b: number; who: string; text: string }[] = [
+  { a: 0.2, b: 1.7, who: '', text: 'Out the front door… freedom at last!' },
+  { a: 2.8, b: 5.2, who: 'Uncle Gus', text: 'Mmm-mm! Nothing beats a big bucket of fried chicken…' },
+  { a: 5.3, b: 6.9, who: 'Uncle Gus', text: '…but a crispy little nugget for dessert? Don’t mind if I do!' },
+  { a: 7.0, b: 8.5, who: 'Nugget', text: 'Not today, mister! Say hello to my KETCHUP!' },
+  { a: 8.6, b: BOSS_INTRO_LENGTH, who: 'Boss fight', text: 'Squirt ketchup at Uncle Gus and dodge his drumsticks!' },
+];
+
+const BOSS_EVENTS: { t: number; e: CutEvent }[] = [
+  { t: 1.6, e: 'jump' },
+  { t: 2.6, e: 'thud' },
+  { t: 3.5, e: 'chomp' },
+  { t: 4.5, e: 'chomp' },
+  { t: 5.35, e: 'gasp' },
+  { t: 7.3, e: 'pop' },
+  { t: 8.0, e: 'squirt' },
+  { t: 8.15, e: 'squirt' },
+];
+
+const BOSS_SHOTS: [number, [number, number, number], [number, number, number]][] = [
+  [0, [15.2, 3.4, 28.5], [15, 1.0, 21.6]],
+  [1.5, [9.6, 3.6, 23.4], [17.5, 3.2, 26.6]],
+  [2.9, [16.9, 2.0, 22.5], [15, 1.7, 26.2]],
+  [5.2, [16.3, 1.75, 22.6], [15, 1.7, 26.4]],
+  [6.9, [15.5, 0.75, 24.7], [15, 0.4, 23.3]],
+  [8.4, [15.9, 0.9, 25.0], [15, 0.45, 23.3]],
+  [BOSS_INTRO_LENGTH, [BOSS_CAM_TARGET.x + CAM_OFFSET.x, CAM_OFFSET.y, BOSS_CAM_TARGET.y + CAM_OFFSET.z], [BOSS_CAM_TARGET.x, 0, BOSS_CAM_TARGET.y]],
+];
+
+/**
+ * The nugget runs out of the front door and Uncle Gus drops in, munching fried chicken.
+ * Poses the scene's own nugget and boss models.
+ */
+export class BossCutscene {
+  t = 0;
+  fade = 0;
+  caption: Caption | null = null;
+  events: CutEvent[] = [];
+
+  reset() {
+    this.t = 0;
+    this.caption = null;
+    this.events = [];
+  }
+
+  get done() {
+    return this.t >= BOSS_INTRO_LENGTH;
+  }
+
+  update(dt: number, camera: THREE.PerspectiveCamera, time: number, n: NuggetModel, gus: BossModel) {
+    const prev = this.t;
+    this.t = Math.min(BOSS_INTRO_LENGTH, this.t + dt);
+    const t = this.t;
+    this.events = BOSS_EVENTS.filter((e) => e.t > prev && e.t <= t).map((e) => e.e);
+    const cap = BOSS_CAPTIONS.find((c) => t >= c.a && t < c.b);
+    this.caption = cap ? { who: cap.who, text: cap.text } : null;
+
+    // the nugget: runs out, freezes, then pulls out the ketchup
+    const run = seg(t, 0, 1.4);
+    n.root.position.set(ENTRY.x, 0, lerp(21.2, ENTRY.y, run));
+    n.root.scale.setScalar(1);
+    n.awake = 1;
+    n.opacity = 1;
+    n.mood = t > 2.6 && t < 7.0 ? 'scared' : 'happy';
+    n.bottleOut = seg(t, 7.0, 7.4);
+    if (this.events.includes('squirt')) n.recoil = 1;
+    const shiver = t > 5.3 && t < 7.0 ? Math.sin(t * 60) * 0.015 : 0;
+    n.animate(Math.PI / 2, t < 1.4, time * 18, dt);
+    n.inner.position.x = shiver;
+    if (t > 2.6 && t < 2.9) n.inner.position.y = Math.sin(((t - 2.6) / 0.3) * Math.PI) * 0.25; // jolted by the thud
+
+    // Uncle Gus: drops in from the side with a big jump
+    const jump = clamp01((t - 1.6) / 1.0);
+    const from = { x: 22.5, y: 27.5 };
+    if (t < 1.6) gus.root.position.set(from.x, 0, from.y);
+    else {
+      gus.root.position.set(lerp(from.x, GUS_SPOT.x, jump), Math.sin(jump * Math.PI) * 2.4, lerp(from.y, GUS_SPOT.y, jump));
+    }
+    gus.root.visible = t > 1.4;
+    gus.crouch = t > 2.6 && t < 3.0 ? 1 - (t - 2.6) / 0.4 : t > 1.45 && t < 1.6 ? 1 : 0;
+    gus.windup = 0;
+    gus.fallen = 0;
+    gus.flash = 0;
+    // two big bites of fried chicken
+    gus.eat = t > 3.0 && t < 3.6 ? (t - 3.0) / 0.6 : t > 4.0 && t < 4.6 ? (t - 4.0) / 0.6 : 0;
+    gus.chew = t > 3.4 && t < 5.2 ? 1 : 0;
+    const look = t < 5.3 ? -1.0 : -Math.PI / 2; // eating with a 3/4 turn to the camera, then glares at the nugget
+    gus.animate(t < 2.6 ? Math.atan2(GUS_SPOT.y - from.y, GUS_SPOT.x - from.x) : look, false, 0, dt, time);
+
+    // camera
+    let i = 0;
+    while (i < BOSS_SHOTS.length - 2 && t >= BOSS_SHOTS[i + 1][0]) i++;
+    const [t0, p0, l0] = BOSS_SHOTS[i];
+    const [t1, p1, l1] = BOSS_SHOTS[i + 1];
+    const k = seg(t, t0, t1);
+    const shake = t > 2.6 && t < 3.0 ? (3.0 - t) * 0.3 : 0;
+    camera.position.set(lerp(p0[0], p1[0], k) + (Math.random() - 0.5) * shake, lerp(p0[1], p1[1], k) + (Math.random() - 0.5) * shake, lerp(p0[2], p1[2], k));
+    camera.lookAt(lerp(l0[0], l1[0], k), lerp(l0[1], l1[1], k), lerp(l0[2], l1[2], k));
   }
 }

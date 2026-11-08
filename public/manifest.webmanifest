@@ -1,0 +1,16 @@
+{
+  "name": "Nugget Escape",
+  "short_name": "Nugget Escape",
+  "description": "Help a brave chicken nugget sneak out of the house and beat Uncle Gus!",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#0e1324",
+  "theme_color": "#0e1324",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

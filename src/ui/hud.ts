@@ -1,4 +1,5 @@
 import { currentObjective, DASH_COOLDOWN, type GameState } from '../game/state';
+import { BOTTLE_SIZE, REFILL_TIME } from '../game/boss';
 import { KEY_INFO, KEY_ORDER, type KeyColor } from '../game/types';
 import { drawKey, drawNuggetPortrait, makeCanvas } from '../render/paint';
 
@@ -84,7 +85,7 @@ export class Hud {
       this.lastFloor = p.floor;
       $('hud-floor').textContent = map.def.name;
     }
-    const room = map.roomAt(p.pos.x, p.pos.y)?.name ?? this.lastRoom;
+    const room = state.boss ? 'Front Garden' : map.roomAt(p.pos.x, p.pos.y)?.name ?? this.lastRoom;
     if (room !== this.lastRoom) {
       this.lastRoom = room;
       $('hud-room').textContent = room;
@@ -114,7 +115,8 @@ export class Hud {
       this.lastObjective = key;
       const el = $('hud-objective');
       if (obj) {
-        (el.querySelector('.obj-dot') as HTMLElement).style.cssText = `background:${KEY_INFO[obj.color].hex};box-shadow:0 0 12px ${KEY_INFO[obj.color].hex}`;
+        const hex = obj.action === 'boss' ? '#e0201c' : KEY_INFO[obj.color].hex;
+        (el.querySelector('.obj-dot') as HTMLElement).style.cssText = `background:${hex};box-shadow:0 0 12px ${hex}`;
         (el.querySelector('.obj-text') as HTMLElement).textContent = obj.text;
       }
     }
@@ -122,6 +124,15 @@ export class Hud {
     const dash = document.getElementById('dash-btn');
     if (dash) dash.classList.toggle('cooling', p.dashCd > 0.05);
     void DASH_COOLDOWN;
+    if (state.boss) {
+      const b = state.boss;
+      $('boss-hp').style.transform = `scaleX(${Math.max(0, b.hp) / b.maxHp})`;
+      const empty = state.ketchup <= 0;
+      const fill = empty ? Math.min(1, state.refill / REFILL_TIME) : state.ketchup / BOTTLE_SIZE;
+      $('ketchup-fill').style.transform = `scaleX(${fill})`;
+      $('ketchup-fill').parentElement!.classList.toggle('empty', empty);
+      document.getElementById('fire-btn')?.classList.toggle('cooling', empty);
+    }
     this.drawMinimap(state);
   }
 

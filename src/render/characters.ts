@@ -70,6 +70,11 @@ export class NuggetModel {
   /** 0 = asleep (eyes shut, it's just food), 1 = wide awake. */
   awake = 1;
   opacity = 1;
+  /** 0..1: how far the ketchup bottle is pulled out (boss fight). */
+  bottleOut = 0;
+  /** Recoil from the last squirt, decays to 0. */
+  recoil = 0;
+  readonly bottle = new THREE.Group();
 
   constructor() {
     nuggetGeo ??= nuggetGeometry();
@@ -112,6 +117,18 @@ export class NuggetModel {
     this.ooh.scale.set(0.04, 0.05, 0.02);
     this.ooh.position.set(0, 0.27, 0.178);
     this.inner.add(this.ooh);
+    // Ketchup bottle, held out in front, pointing forward (+z)
+    const bb = builder(false, false);
+    const btl = new THREE.Group();
+    btl.add(cyl(bb, 0, 0, 0, 0.075, 0.24, '#d91e1e', { rough: 0.35 }));
+    btl.add(cyl(bb, 0, 0.24, 0, 0.06, 0.05, '#ffffff', { rough: 0.4 }));
+    btl.add(cyl(bb, 0, 0.29, 0, 0.012, 0.07, '#ffffff', { rough: 0.4 }, 0.03));
+    btl.add(cbox(bb, 0, 0.12, 0.074, 0.09, 0.09, 0.01, '#fff3c4'));
+    btl.rotation.x = Math.PI / 2;
+    btl.position.set(0, 0, -0.12);
+    this.bottle.add(btl);
+    this.bottle.position.set(0.17, 0.27, 0.2);
+    this.inner.add(this.bottle);
     this.root.traverse((o) => {
       if (o instanceof THREE.Mesh) {
         o.castShadow = true;
@@ -145,7 +162,191 @@ export class NuggetModel {
     const blink = this.blinkT < 0 ? 0.1 : 1;
     this.eyes.scale.y = Math.max(0.06, this.awake * blink * (scared ? 1.2 : 1));
     this.smile.visible &&= this.awake > 0.5;
+    this.bottle.visible = this.bottleOut > 0.01;
+    this.bottle.scale.setScalar(Math.max(0.01, this.bottleOut));
+    this.recoil = Math.max(0, this.recoil - dt * 8);
+    this.bottle.position.z = 0.2 - this.recoil * 0.06;
+    if (this.bottleOut > 0.5) {
+      this.armR.rotation.x = -1.3;
+      this.armR.rotation.z = 0.2;
+      this.armL.rotation.x = -1.1;
+      this.armL.rotation.z = -0.3;
+    }
     for (const m of this.allMats) m.opacity = this.opacity;
+  }
+}
+
+// ---------------------------------------------------------------- boss: Uncle Gus
+
+/** A fried chicken drumstick (used in the bucket and as a thrown projectile). */
+export function drumstick(scale = 1) {
+  const b = builder(false, false);
+  const g = new THREE.Group();
+  g.add(ball(b, 0, 0, 0.06, 0.2, 0.17, 0.26, '#c8731f', { rough: 0.95 }));
+  g.add(ball(b, 0.03, 0.05, 0.02, 0.1, 0.06, 0.12, '#e09a3a', { rough: 0.95 }));
+  const bone = cyl(b, 0, 0, 0, 0.022, 0.18, '#f6efe0');
+  bone.rotation.x = -Math.PI / 2;
+  bone.position.set(0, 0, -0.06);
+  g.add(bone);
+  g.add(ball(b, -0.02, 0, -0.16, 0.06, 0.06, 0.06, '#f6efe0'));
+  g.add(ball(b, 0.02, 0, -0.16, 0.06, 0.06, 0.06, '#f6efe0'));
+  g.scale.setScalar(scale);
+  g.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+  return g;
+}
+
+function bucketTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 128;
+  const ctx = c.getContext('2d')!;
+  for (let i = 0; i < 16; i++) {
+    ctx.fillStyle = i % 2 ? '#ffffff' : '#d62828';
+    ctx.fillRect(i * 16, 0, 16, 128);
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.ellipse(64, 64, 46, 30, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#d62828';
+  ctx.font = '900 22px "Lilita One", "Arial Rounded MT Bold", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('YUM!', 64, 66);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+export class BossModel {
+  readonly root = new THREE.Group();
+  readonly body = new THREE.Group();
+  readonly height = 2.35;
+  private hipL: THREE.Group;
+  private hipR: THREE.Group;
+  readonly armL: THREE.Group;
+  readonly armR: THREE.Group;
+  readonly head: THREE.Group;
+  private mouth: THREE.Mesh;
+  private hand: THREE.Group;
+  private stars = new THREE.Group();
+  private flashMats: THREE.MeshStandardMaterial[] = [];
+  /** 0..1 poses the renderer and cutscene set. */
+  windup = 0;
+  crouch = 0;
+  eat = 0;
+  fallen = 0;
+  flash = 0;
+  chew = 0;
+
+  constructor() {
+    const b = builder(true, false);
+    const skin = '#f0b98a', shirt = '#3fa7d6', shorts = '#e07a2e';
+    this.root.add(this.body);
+    this.hipL = pivot(this.body, -0.28, 0.75, 0);
+    this.hipR = pivot(this.body, 0.28, 0.75, 0);
+    for (const hip of [this.hipL, this.hipR]) {
+      limb(b, hip, 0.15, 0.7, skin);
+      hip.add(cbox(b, 0, -0.72, 0.08, 0.3, 0.14, 0.42, '#f5f5f5'));
+      hip.add(cyl(b, 0, -0.25, 0, 0.19, 0.3, shorts));
+    }
+    // big round belly in a sky-blue shirt, with a napkin bib
+    this.body.add(ball(b, 0, 1.3, 0.05, 1.45, 1.35, 1.25, shirt, { rough: 0.85 }));
+    this.body.add(ball(b, 0, 0.95, 0.05, 1.3, 0.7, 1.15, shorts));
+    const bib = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.55, 3), mat('#ffffff', { rough: 1 }));
+    bib.rotation.set(Math.PI, Math.PI / 6, 0);
+    bib.scale.z = 0.15;
+    bib.position.set(0, 1.62, 0.6);
+    this.body.add(bib);
+    this.body.add(ball(b, 0.08, 1.6, 0.64, 0.08, 0.08, 0.03, '#d62828'));
+    this.body.add(ball(b, -0.1, 1.48, 0.66, 0.07, 0.07, 0.03, '#d62828'));
+    // arms
+    this.armL = pivot(this.body, -0.72, 1.75, 0);
+    this.armR = pivot(this.body, 0.72, 1.75, 0);
+    for (const arm of [this.armL, this.armR]) {
+      limb(b, arm, 0.13, 0.75, skin);
+      arm.add(ball(b, 0, -0.08, 0, 0.36, 0.3, 0.36, shirt));
+      arm.add(ball(b, 0, -0.8, 0, 0.26, 0.26, 0.26, skin));
+    }
+    // bucket of fried chicken in the left arm
+    const bucket = new THREE.Group();
+    const bm = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.26, 0.55, 24, 1, true), new THREE.MeshStandardMaterial({ map: bucketTexture(), roughness: 0.6, side: THREE.DoubleSide }));
+    bm.castShadow = true;
+    bucket.add(bm);
+    bucket.add(cyl(b, 0, -0.275, 0, 0.26, 0.02, '#d62828'));
+    for (let i = 0; i < 5; i++) {
+      const d = drumstick(0.9);
+      d.position.set(Math.cos(i * 1.3) * 0.15, 0.25, Math.sin(i * 1.3) * 0.15);
+      d.rotation.set(-1.1 + (i % 2) * 0.4, i * 1.3, 0);
+      bucket.add(d);
+    }
+    bucket.position.set(0.15, -0.75, 0.32);
+    bucket.rotation.x = 0.2;
+    this.armL.add(bucket);
+    // a drumstick in the right hand
+    this.hand = new THREE.Group();
+    this.hand.position.set(0, -0.85, 0.08);
+    const held = drumstick(1.1);
+    held.rotation.x = -Math.PI / 2;
+    this.hand.add(held);
+    this.armR.add(this.hand);
+    // head with a backwards cap and a big grin
+    this.head = pivot(this.body, 0, 2.15, 0.05);
+    this.head.add(ball(b, 0, 0, 0, 0.62, 0.6, 0.6, skin, { rough: 0.7 }));
+    this.head.add(ball(b, 0, -0.16, 0.12, 0.5, 0.3, 0.42, skin));
+    for (const sx of [-1, 1]) {
+      this.head.add(ball(b, sx * 0.12, 0.06, 0.27, 0.08, 0.1, 0.04, '#1d1410', { rough: 0.2 }));
+      this.head.add(ball(b, sx * 0.11, 0.085, 0.29, 0.025, 0.025, 0.01, '#ffffff', { emissive: '#ffffff' }));
+      this.head.add(ball(b, sx * 0.2, -0.05, 0.25, 0.1, 0.06, 0.03, '#ee8a7a'));
+      this.head.add(ball(b, sx * 0.3, 0, 0, 0.1, 0.14, 0.1, skin));
+      this.head.add(cbox(b, sx * 0.12, 0.17, 0.27, 0.14, 0.03, 0.03, '#5b3a29'));
+    }
+    this.head.add(ball(b, 0, -0.01, 0.31, 0.11, 0.1, 0.1, '#e8a27a'));
+    this.mouth = new THREE.Mesh(GEO.sphere, mat('#7a2a20'));
+    this.mouth.scale.set(0.2, 0.05, 0.05);
+    this.mouth.position.set(0, -0.15, 0.27);
+    this.head.add(this.mouth);
+    this.head.add(ball(b, 0, 0.17, -0.02, 0.63, 0.36, 0.62, '#2e4fa3'));
+    this.head.add(cbox(b, 0, 0.2, -0.32, 0.3, 0.04, 0.24, '#2e4fa3'));
+    // dizzy stars when beaten
+    for (let i = 0; i < 4; i++) {
+      const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.09), new THREE.MeshBasicMaterial({ color: '#ffd84a', toneMapped: false }));
+      st.position.set(Math.cos(i * 1.57) * 0.45, 0, Math.sin(i * 1.57) * 0.45);
+      this.stars.add(st);
+    }
+    this.stars.position.y = 0.55;
+    this.head.add(this.stars);
+    this.root.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        o.castShadow = true;
+      }
+    });
+    this.flashMats = b.mats.filter((m): m is THREE.MeshStandardMaterial => m instanceof THREE.MeshStandardMaterial);
+  }
+
+  animate(facing: number | null, moving: boolean, phase: number, dt: number, time: number) {
+    void dt;
+    if (facing !== null) this.root.rotation.y = faceAngle(facing);
+    const swing = moving ? Math.sin(phase) * 0.45 : 0;
+    const crouch = this.crouch;
+    this.hipL.rotation.x = swing - crouch * 0.5;
+    this.hipR.rotation.x = -swing - crouch * 0.5;
+    this.body.position.y = (moving ? Math.abs(Math.cos(phase)) * 0.08 : Math.sin(time * 2) * 0.02) - crouch * 0.22;
+    this.body.rotation.z = moving ? Math.sin(phase) * 0.06 : 0;
+    // left arm hugs the bucket; right arm eats or winds up a throw
+    this.armL.rotation.set(-0.9, 0, -0.35);
+    const eat = Math.max(0, Math.sin(this.eat * Math.PI));
+    this.armR.rotation.x = -0.4 - eat * 2.0 - this.windup * 2.6 + (this.windup > 0.95 ? 0 : 0);
+    this.armR.rotation.z = 0.3 + eat * 0.3;
+    this.hand.visible = this.windup < 0.98;
+    const chew = this.chew > 0 ? Math.abs(Math.sin(time * 14)) : 0;
+    this.mouth.scale.set(0.2, 0.05 + chew * 0.08 + eat * 0.1, 0.05);
+    this.head.rotation.x = -eat * 0.25;
+    this.body.rotation.x = -this.fallen * 1.45 + crouch * 0.2;
+    this.root.position.y = Math.max(this.root.position.y, 0);
+    this.stars.visible = this.fallen > 0.5;
+    this.stars.rotation.y = time * 4;
+    for (const m of this.flashMats) m.emissive.setRGB(this.flash, 0, 0);
   }
 }
 

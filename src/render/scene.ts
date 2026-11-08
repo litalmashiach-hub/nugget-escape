@@ -5,19 +5,22 @@
  */
 import { THREE, cutUniforms, canvasTexture, glowTexture, GEO } from './kit';
 import { buildFloor, type FloorView } from './world';
-import { NuggetModel, PersonModel, makeFamily, type FamilyModel } from './characters';
-import { Cutscene, CAM_OFFSET } from './cutscene';
+import { NuggetModel, PersonModel, BossModel, drumstick, makeFamily, type FamilyModel } from './characters';
+import { Cutscene, BossCutscene, CAM_OFFSET } from './cutscene';
 import { bakeBubble, drawSymbol, makeCanvas } from './paint';
 import { START } from '../game/levels';
 import { INTRO_TIME, type Chaser, type GameEvent, type GameState } from '../game/state';
 import { castRay } from '../game/vision';
+import { ARENA, SLAM_RADIUS } from '../game/boss';
 import { KEY_INFO, type KeyColor } from '../game/types';
 
-export type View = 'game' | 'menu' | 'cutscene';
+export type View = 'game' | 'menu' | 'cutscene' | 'bossIntro';
 
 export interface SceneOptions {
   /** Cheaper rendering for slow or software GPUs: no shadows, no lamp lights. */
   lowFx: boolean;
+  /** Phones and tablets: shadows stay, but smaller and without lamp lights. */
+  phone?: boolean;
 }
 
 const MAX_RAYS = 48;
@@ -141,6 +144,11 @@ export class Scene {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(40, 1, 0.1, 120);
   readonly cutscene = new Cutscene();
+  readonly bossCut = new BossCutscene();
+  private gus = new BossModel();
+  private ketchupBlobs: THREE.Mesh[] = [];
+  private flyingSticks: THREE.Group[] = [];
+  private slamRing: THREE.Mesh;
   readonly opts: SceneOptions;
   private host: HTMLElement;
   private floors = new Map<number, FloorView>();
@@ -167,7 +175,7 @@ export class Scene {
     this.host = host;
     this.opts = opts;
     this.renderer = new THREE.WebGLRenderer({ antialias: !opts.lowFx, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(opts.lowFx ? 1 : Math.min(window.matchMedia?.('(pointer: coarse)').matches ? 1.5 : 2, window.devicePixelRatio || 1));
+    this.renderer.setPixelRatio(opts.lowFx ? 1 : Math.min(opts.phone ? 1.5 : 2, window.devicePixelRatio || 1));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
@@ -177,11 +185,10 @@ export class Scene {
 
     this.scene.background = new THREE.Color('#0e1324');
     this.scene.fog = new THREE.Fog('#0e1324', 26, 60);
-    this.hemi.intensity = opts.lowFx ? 1.7 : 1.1;
+    this.hemi.intensity = opts.lowFx ? 1.7 : opts.phone ? 1.35 : 1.1;
     this.scene.add(this.hemi, this.sun, this.sun.target);
     this.sun.castShadow = !opts.lowFx;
-    const phone = window.matchMedia?.('(pointer: coarse)').matches;
-    this.sun.shadow.mapSize.setScalar(phone ? 1024 : 2048);
+    this.sun.shadow.mapSize.setScalar(opts.phone ? 1024 : 2048);
     const sc = this.sun.shadow.camera;
     sc.left = sc.bottom = -16;
     sc.right = sc.top = 16;
@@ -189,7 +196,7 @@ export class Scene {
     sc.far = 50;
     this.sun.shadow.bias = -0.0005;
     this.sun.shadow.normalBias = 0.03;
-    if (!opts.lowFx) {
+    if (!opts.lowFx && !opts.phone) {
       for (let i = 0; i < 7; i++) {
         const l = new THREE.PointLight('#ffc88a', 0, 9, 1.4);
         this.lamps.push(l);
@@ -198,7 +205,30 @@ export class Scene {
     }
 
     for (const k of ['!', '?', 'yum'] as const) this.bubbleTex[k] = canvasTexture(bakeBubble(k));
-    this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group);
+    this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.gus.root);
+    this.gus.root.visible = false;
+    const blobMat = new THREE.MeshStandardMaterial({ color: '#e0201c', roughness: 0.25, emissive: '#7a0a08', emissiveIntensity: 0.5 });
+    for (let i = 0; i < 24; i++) {
+      const m = new THREE.Mesh(GEO.lowSphere, blobMat);
+      m.scale.set(0.16, 0.13, 0.22);
+      m.visible = false;
+      m.castShadow = true;
+      this.ketchupBlobs.push(m);
+      this.scene.add(m);
+    }
+    for (let i = 0; i < 16; i++) {
+      const d = drumstick(1.5);
+      d.visible = false;
+      this.flyingSticks.push(d);
+      this.scene.add(d);
+    }
+    this.slamRing = new THREE.Mesh(new THREE.RingGeometry(SLAM_RADIUS - 0.12, SLAM_RADIUS, 40), new THREE.MeshBasicMaterial({ color: '#ff3030', transparent: true, opacity: 0.6, depthWrite: false, toneMapped: false }));
+    const fill = new THREE.Mesh(new THREE.CircleGeometry(SLAM_RADIUS - 0.12, 40), new THREE.MeshBasicMaterial({ color: '#ff3030', transparent: true, opacity: 0.18, depthWrite: false, toneMapped: false }));
+    this.slamRing.add(fill);
+    this.slamRing.rotation.x = -Math.PI / 2;
+    this.slamRing.renderOrder = 3;
+    this.slamRing.visible = false;
+    this.scene.add(this.slamRing);
 
     // Dad's plate on the dining table: where the nugget starts.
     const plateMesh = new THREE.Mesh(GEO.cyl, new THREE.MeshStandardMaterial({ color: '#fbfbf7', roughness: 0.3 }));
@@ -240,6 +270,8 @@ export class Scene {
     for (const v of this.floors.values()) for (const d of v.doors) { d.amount = 0; d.hinge.rotation.y = 0; }
     this.shake = 0;
     this.wonTime = 0;
+    this.gus.fallen = 0;
+    this.bossCut.reset();
   }
 
   snapCamera() {
@@ -340,6 +372,34 @@ export class Scene {
       case 'locked':
         this.shake = Math.max(this.shake, 0.05);
         break;
+      case 'squirt':
+        this.nugget.recoil = 1;
+        for (let i = 0; i < 4; i++) {
+          const a = state.player.facing + (Math.random() - 0.5) * 0.6;
+          this.particles.emit(p.x + Math.cos(a) * 0.3, 0.32, p.y + Math.sin(a) * 0.3, { vx: Math.cos(a) * 2, vy: 0.8, vz: Math.sin(a) * 2, grav: 6, life: 0.35, size: 0.05, color: '#e0201c' });
+        }
+        break;
+      case 'bossHit':
+        for (let i = 0; i < 14; i++) this.particles.emit(e.x, 1.2 + Math.random() * 0.6, e.y, { vx: (Math.random() - 0.5) * 4, vy: 1 + Math.random() * 2.5, vz: (Math.random() - 0.5) * 4, grav: 9, life: 0.7, size: 0.08, color: i % 3 ? '#e0201c' : '#ff6a4a' });
+        this.shake = Math.max(this.shake, 0.04);
+        break;
+      case 'slam':
+        this.shake = 0.35;
+        for (let i = 0; i < 40; i++) {
+          const a = (i / 40) * Math.PI * 2;
+          this.particles.emit(e.x + Math.cos(a) * 0.8, 0.1, e.y + Math.sin(a) * 0.8, { vx: Math.cos(a) * 4, vy: 0.8 + Math.random(), vz: Math.sin(a) * 4, grav: 4, life: 0.7, size: 0.12, color: '#c9b48a' });
+        }
+        break;
+      case 'hurt':
+        this.shake = 0.25;
+        for (let i = 0; i < 20; i++) this.particles.emit(p.x, 0.3, p.y, { vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 3, vz: (Math.random() - 0.5) * 3, grav: 9, life: 0.9, size: 0.05, color: '#d99a3a' });
+        break;
+      case 'bossDown': {
+        const b = state.boss!;
+        this.shake = 0.3;
+        this.burst(b.pos.x, 2, b.pos.y, '#ffd84a', 40);
+        break;
+      }
     }
   }
 
@@ -360,12 +420,14 @@ export class Scene {
     this.resize();
     this.ensureEntities(state);
     const p = state.player;
-    const story = view !== 'game';
+    const bossIntro = view === 'bossIntro';
+    const story = view === 'cutscene' || view === 'menu';
     this.showFloor(story ? START.floor : p.floor);
     const fv = this.floors.get(story ? START.floor : p.floor)!;
 
     this.cutscene.group.visible = story;
     this.nugget.root.visible = !story;
+    this.gus.root.visible = !story && !!state.boss && p.floor === 0;
     this.plate.visible = true;
     cutUniforms.uCutOn.value = story ? 0 : 1;
 
@@ -394,12 +456,14 @@ export class Scene {
     }
 
     if (story) this.renderStory(dt, view);
+    else if (bossIntro) this.renderBossIntro(state, dt);
     else this.renderGame(state, dt, fv);
+    if (!story) this.renderBossFight(state, dt, bossIntro);
 
     this.particles.update(dt);
 
     // Shadow-casting moonlight follows the camera focus
-    const focus = story ? new THREE.Vector3(17, 0, 4.5) : this.camTarget;
+    const focus = story ? new THREE.Vector3(17, 0, 4.5) : bossIntro ? new THREE.Vector3(15, 0, 24.5) : this.camTarget;
     this.sun.position.set(focus.x - 7, 16, focus.z + 9);
     this.sun.target.position.copy(focus);
 
@@ -420,6 +484,61 @@ export class Scene {
     this.setDanger(0, dt);
   }
 
+  private renderBossIntro(state: GameState, dt: number) {
+    for (const c of this.chasers.values()) { c.model.root.visible = false; c.bubble.visible = false; c.cone.visible = false; }
+    this.gus.root.visible = true;
+    cutUniforms.uCutOn.value = 0;
+    this.bossCut.update(dt, this.camera, this.time, this.nugget, this.gus);
+    if (this.camera.aspect < 0.8) {
+      const dir = this.camera.getWorldDirection(new THREE.Vector3());
+      this.camera.position.addScaledVector(dir, -2.0);
+    }
+    this.camReady = false;
+    this.setDanger(0, dt);
+    void state;
+  }
+
+  /** Uncle Gus, flying ketchup and drumsticks, the slam warning ring. */
+  private renderBossFight(state: GameState, dt: number, intro: boolean) {
+    const b = state.boss;
+    const fighting = !!b && !intro && state.player.floor === 0;
+    let ki = 0, di = 0;
+    if (fighting) {
+      const g = this.gus;
+      g.root.position.set(b.pos.x, b.mode === 'jump' ? Math.sin(b.jump * Math.PI) * 2.6 : 0, b.pos.y);
+      g.windup = b.mode === 'throwWindup' ? Math.min(1, g.windup + dt * 4) : Math.max(0, g.windup - dt * 6);
+      g.crouch = b.mode === 'slamWindup' ? Math.min(1, g.crouch + dt * 3) : b.mode === 'recover' ? Math.max(0, g.crouch - dt * 1.5) : b.mode === 'jump' ? 0.3 : Math.max(0, g.crouch - dt * 4);
+      if (b.mode === 'recover' && b.timer > 0.6) g.crouch = 0.8;
+      g.fallen = b.mode === 'defeated' || (state.status === 'won' && b.hp <= 0) ? Math.min(1, g.fallen + dt * 2.5) : 0;
+      g.flash = b.flash > 0 ? 0.9 : 0;
+      g.eat = 0;
+      g.chew = 0;
+      g.animate(b.facing, b.mode === 'walk', b.walkPhase, dt, this.time);
+      for (const s of state.shots) {
+        if (s.kind === 'ketchup' && ki < this.ketchupBlobs.length) {
+          const m = this.ketchupBlobs[ki++];
+          m.visible = true;
+          m.position.set(s.pos.x, 0.35 + (1.4 - s.life) * 0.4, s.pos.y);
+          m.rotation.y = Math.atan2(s.vel.x, s.vel.y);
+        } else if (s.kind === 'drumstick' && di < this.flyingSticks.length) {
+          const d = this.flyingSticks[di++];
+          d.visible = true;
+          d.position.set(s.pos.x, 0.6, s.pos.y);
+          d.rotation.set(s.spin, s.spin * 0.7, 0);
+        }
+      }
+      const ring = b.target && (b.mode === 'slamWindup' || b.mode === 'jump');
+      this.slamRing.visible = !!ring;
+      if (ring) {
+        this.slamRing.position.set(b.target!.x, 0.05, b.target!.y);
+        const pulse = 1 + Math.sin(this.time * 18) * 0.04;
+        this.slamRing.scale.set(pulse, pulse, 1);
+      }
+    } else this.slamRing.visible = false;
+    for (; ki < this.ketchupBlobs.length; ki++) this.ketchupBlobs[ki].visible = false;
+    for (; di < this.flyingSticks.length; di++) this.flyingSticks[di].visible = false;
+  }
+
   private renderGame(state: GameState, dt: number, fv: FloorView) {
     const p = state.player;
     const map = state.maps[p.floor];
@@ -434,19 +553,26 @@ export class Scene {
       nz = START.plate.y + (START.y - START.plate.y) * e;
       ny = 0.9 * (1 - e) + Math.sin(Math.min(1, e) * Math.PI) * 0.7;
     }
+    const afterBoss = !!state.boss;
     if (state.status === 'won') {
       this.wonTime += dt;
-      nz += Math.min(this.wonTime, 2.4) * 3;
+      // without a boss the nugget runs off down the garden path; after the fight it hops for joy
+      if (afterBoss) ny = Math.abs(Math.sin(this.wonTime * 7)) * 0.35;
+      else nz += Math.min(this.wonTime, 2.4) * 3;
     } else this.wonTime = 0;
     n.root.position.set(nx, ny, nz);
     const anyChase = state.chasers.some((c) => c.floor === p.floor && (c.mode === 'chase' || c.mode === 'alert'));
     n.mood = anyChase || state.status === 'caught' ? 'scared' : 'happy';
     n.awake = 1;
-    const won = state.status === 'won' && this.wonTime < 2.4;
+    const won = state.status === 'won' && this.wonTime < 2.4 && !afterBoss;
     if (won) p.walkPhase += dt * 14;
-    n.animate(won ? Math.PI / 2 : p.facing, (p.moving && state.status === 'playing') || won, p.walkPhase, dt, p.dashTime > 0);
+    const fighting = state.status === 'boss';
+    n.bottleOut = afterBoss ? 1 : 0;
+    if (fighting && state.boss!.mode === 'jump') n.mood = 'scared';
+    n.animate(won ? Math.PI / 2 : afterBoss && state.status === 'won' ? Math.PI / 2 : p.facing, (p.moving && (state.status === 'playing' || fighting)) || won, p.walkPhase, dt, p.dashTime > 0);
+    if (fighting && state.boss!.mode === 'jump') n.mood = 'scared';
     n.opacity = p.hidden ? 0.5 : 1;
-    n.root.visible = !(p.invuln > 0 && state.status === 'playing' && Math.floor(this.time * 12) % 2);
+    n.root.visible = !(p.invuln > 0 && (state.status === 'playing' || fighting) && Math.floor(this.time * 12) % 2);
     if (state.status === 'caught') {
       const k = Math.max(0, state.statusTimer) / 1.7;
       n.root.scale.setScalar(0.4 + k * 0.6);
@@ -455,7 +581,7 @@ export class Scene {
       n.root.scale.setScalar(1);
       n.inner.position.x = 0;
     }
-    if (p.moving && state.status === 'playing' && Math.random() < dt * (p.dashTime > 0 ? 40 : 6)) {
+    if (p.moving && (state.status === 'playing' || fighting) && Math.random() < dt * (p.dashTime > 0 ? 40 : 6)) {
       this.particles.emit(p.pos.x + (Math.random() - 0.5) * 0.15, 0.03, p.pos.y + (Math.random() - 0.5) * 0.15, { vy: 0.3, life: 0.5, size: 0.05, color: '#d9a54a' });
     }
 
@@ -498,20 +624,29 @@ export class Scene {
 
     // ------------------------------------------------ camera
     const target = new THREE.Vector3(nx, 0, nz);
-    const margin = 4.5;
-    if (map.w > margin * 2) target.x = Math.max(margin, Math.min(map.w - margin, target.x));
-    target.z = Math.max(2.5, Math.min(map.h - 1, target.z));
-    if (state.status === 'won') target.z = nz;
+    if (afterBoss) {
+      // frame both the nugget and Uncle Gus inside the garden
+      const b = state.boss!;
+      target.set((nx + b.pos.x) / 2, 0, (nz + b.pos.y) / 2);
+      target.x = Math.max(ARENA.x0 + 3, Math.min(ARENA.x1 - 3, target.x));
+      target.z = Math.max(ARENA.y0 + 1.5, Math.min(ARENA.y1 - 2, target.z));
+    } else {
+      const margin = 4.5;
+      if (map.w > margin * 2) target.x = Math.max(margin, Math.min(map.w - margin, target.x));
+      target.z = Math.max(2.5, Math.min(map.h - 1, target.z));
+      if (state.status === 'won') target.z = nz;
+    }
     if (!this.camReady) { this.camTarget.copy(target); this.camReady = true; }
     this.camTarget.lerp(target, Math.min(1, dt * 5));
     const portrait = this.camera.aspect < 0.8;
-    const off = CAM_OFFSET.clone().multiplyScalar(portrait ? 1.45 : this.camera.aspect < 1.2 ? 1.15 : 1);
+    const off = CAM_OFFSET.clone().multiplyScalar((portrait ? 1.45 : this.camera.aspect < 1.2 ? 1.15 : 1) * (afterBoss ? 1.08 : 1));
     this.shake = Math.max(0, this.shake - dt * 0.6);
     const jitter = new THREE.Vector3((Math.random() - 0.5) * this.shake, 0, (Math.random() - 0.5) * this.shake);
     this.camera.position.copy(this.camTarget).add(off).add(jitter);
     this.camera.lookAt(this.camTarget.clone().add(jitter));
     cutUniforms.uPlayer.value.set(nx, 0, nz);
 
+    if (fighting && (state.boss!.mode === 'slamWindup' || state.boss!.mode === 'jump')) danger = 1;
     this.setDanger(danger, dt);
   }
 
