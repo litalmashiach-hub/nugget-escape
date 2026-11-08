@@ -1,0 +1,27 @@
+{
+  "name": "nugget-escape",
+  "version": "1.0.0",
+  "description": "The Great Nugget Escape: a chicken nugget comes to life and must escape the house.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:single": "vite build --mode single",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6",
+    "vite-plugin-singlefile": "^2.3.4",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "pixi.js": "^8.22.0"
+  },
+  "private": true,
+  "type": "module"
+}
