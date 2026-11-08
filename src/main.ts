@@ -1,9 +1,9 @@
 import './style.css';
-import { Application } from 'pixi.js';
 import { createGame, currentObjective, update, type GameEvent, type GameOptions, type GameState } from './game/state';
 import { botInput } from './game/bot';
 import { KEY_INFO, type Difficulty } from './game/types';
 import { Scene } from './render/scene';
+import { CUTSCENE_LENGTH } from './render/cutscene';
 import { drawNuggetPortrait } from './render/paint';
 import { Sound } from './audio/sound';
 import { Controls } from './input';
@@ -13,7 +13,7 @@ const STEP = 1 / 60;
 const params = new URLSearchParams(location.search);
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-type Mode = 'menu' | 'game' | 'paused' | 'ended';
+type Mode = 'menu' | 'cutscene' | 'game' | 'paused' | 'ended';
 
 function fmtTime(s: number) {
   const m = Math.floor(s / 60);
@@ -36,19 +36,24 @@ function saveBest(d: Difficulty, t: number) {
   }
 }
 
-async function boot() {
-  const app = new Application();
-  await app.init({
-    resizeTo: window,
-    antialias: true,
-    background: '#0e1324',
-    resolution: Math.min(2, window.devicePixelRatio || 1),
-    autoDensity: true,
-    preference: 'webgl',
-  });
-  $('stage').appendChild(app.canvas);
+/** Software renderers (headless browsers, old machines) get the cheap lighting path. */
+function wantLowFx() {
+  if (params.has('lowfx')) return true;
+  if (params.has('hifx')) return false;
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2') ?? document.createElement('canvas').getContext('webgl');
+    if (!gl) return true;
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const name = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    return /swiftshader|llvmpipe|software|basic render/i.test(name);
+  } catch {
+    return true;
+  }
+}
 
-  const scene = new Scene(app);
+async function boot() {
+  const scene = new Scene($('stage'), { lowFx: wantLowFx() });
   const sound = new Sound();
   const controls = new Controls();
   const hud = new Hud();
@@ -105,11 +110,42 @@ async function boot() {
   const screens = ['screen-title', 'screen-pause', 'screen-win', 'screen-over'];
   const show = (id: string | null) => screens.forEach((s) => ($(s).hidden = s !== id));
   const isTouch = () => document.body.classList.contains('touch');
+  const fadeIn = () => {
+    const f = $('fade');
+    f.hidden = false;
+    f.classList.remove('out');
+    void f.offsetWidth;
+    f.classList.add('out');
+    setTimeout(() => (f.hidden = true), 700);
+  };
 
-  function start() {
+  /** Play the dinner cutscene, then start the game. */
+  function playCutscene() {
     sound.unlock();
     sound.click();
     state = createGame(difficulty, opts);
+    scene.reset();
+    scene.cutscene.reset();
+    hud.reset();
+    mode = 'cutscene';
+    show(null);
+    $('hud').hidden = true;
+    $('touch').hidden = true;
+    $('cutscene').hidden = false;
+    $('btn-skip').focus({ preventScroll: true });
+  }
+
+  function endCutscene() {
+    if (mode !== 'cutscene') return;
+    $('cutscene').hidden = true;
+    start(true);
+    fadeIn();
+  }
+
+  function start(afterCutscene = false) {
+    sound.unlock();
+    if (!afterCutscene) sound.click();
+    state = createGame(difficulty, { ...opts, skipIntro: afterCutscene });
     scene.reset();
     scene.snapCamera();
     hud.reset();
@@ -121,11 +157,12 @@ async function boot() {
     $('hud').hidden = false;
     $('touch').hidden = !isTouch();
     sound.startMusic();
-    hud.toast('Hop off the plate and find the <b style="color:#e8424a">Red key</b>!', '', 3200);
+    hud.toast(afterCutscene ? 'Run! Find the <b style="color:#e8424a">Red key</b> first.' : 'Hop off the plate and find the <b style="color:#e8424a">Red key</b>!', '', 3200);
   }
 
   function toMenu() {
     mode = 'menu';
+    $('cutscene').hidden = true;
     sound.stopMusic();
     state = createGame(difficulty, opts);
     scene.reset();
@@ -170,12 +207,14 @@ async function boot() {
     if (o) hud.toast(`<span class="sw" style="background:${KEY_INFO[o.color].hex};color:${KEY_INFO[o.color].hex}"></span>${o.hint}`, '', 5000);
   };
 
-  $('btn-play').addEventListener('click', start);
+  const restart = () => start();
+  $('btn-play').addEventListener('click', playCutscene);
+  $('btn-skip').addEventListener('click', endCutscene);
   $('btn-resume').addEventListener('click', togglePause);
-  $('btn-restart').addEventListener('click', start);
+  $('btn-restart').addEventListener('click', restart);
   $('btn-menu').addEventListener('click', toMenu);
-  $('btn-again').addEventListener('click', start);
-  $('btn-retry').addEventListener('click', start);
+  $('btn-again').addEventListener('click', restart);
+  $('btn-retry').addEventListener('click', restart);
   $('btn-win-menu').addEventListener('click', toMenu);
   $('btn-over-menu').addEventListener('click', toMenu);
   $('btn-pause').addEventListener('click', togglePause);
@@ -187,7 +226,11 @@ async function boot() {
   controls.onAnyKey = () => sound.unlock();
   controls.bindTouch($('stick'), $('stick-knob'), $('dash-btn'));
   window.addEventListener('keydown', (e) => {
-    if (mode === 'menu' && e.code === 'Enter') start();
+    if (mode === 'menu' && e.code === 'Enter') playCutscene();
+    else if (mode === 'cutscene' && (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter')) {
+      e.preventDefault();
+      endCutscene();
+    }
   });
   window.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'touch' && !isTouch()) {
@@ -278,8 +321,45 @@ async function boot() {
     }
   }
 
-  app.ticker.add((ticker) => {
-    const dt = Math.min(0.05, ticker.deltaMS / 1000);
+  const caption = $('cutscene-caption');
+  const captionWho = $('cutscene-who');
+  const captionText = $('cutscene-text');
+  const bar = $('cutscene-progress');
+  let lastCaption = '';
+  function cutsceneFrame(dt: number) {
+    const cs = scene.cutscene;
+    for (const e of cs.events) {
+      if (e === 'gasp') sound.alert();
+      else if (e === 'jump') sound.dash();
+      else if (e === 'land') sound.step_();
+      else if (e === 'bark') sound.lost();
+      else if (e === 'pop') sound.click();
+    }
+    const c = cs.caption;
+    const key = c ? c.who + c.text : '';
+    if (key !== lastCaption) {
+      lastCaption = key;
+      caption.hidden = !c;
+      if (c) {
+        captionWho.textContent = c.who;
+        captionWho.hidden = !c.who;
+        captionText.textContent = c.text;
+        caption.classList.remove('in');
+        void caption.offsetWidth;
+        caption.classList.add('in');
+      }
+    }
+    bar.style.transform = `scaleX(${cs.t / CUTSCENE_LENGTH})`;
+    $('cutscene').style.setProperty('--fade', String(cs.fade));
+    if (cs.done) endCutscene();
+    void dt;
+  }
+
+  let last = performance.now();
+  const frame = (now: number) => {
+    requestAnimationFrame(frame);
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
     if (mode === 'game' || mode === 'ended') {
       acc += dt * speed;
       let guard = 0;
@@ -294,22 +374,31 @@ async function boot() {
         if (stepTimer <= 0) { sound.step_(); stepTimer = state.player.dashTime > 0 ? 0.08 : 0.17; }
       }
       sound.intensity = state.chasers.some((c) => c.floor === state.player.floor && (c.mode === 'chase' || c.mode === 'alert')) ? 1 : 0;
-      scene.render(state, dt);
+      scene.render(state, dt, 'game');
       hud.update(state);
+    } else if (mode === 'cutscene') {
+      scene.render(state, dt * speed, 'cutscene');
+      cutsceneFrame(dt);
     } else {
-      scene.render(state, dt, mode === 'menu');
+      scene.render(state, dt, mode === 'menu' ? 'menu' : 'game');
     }
-  });
+  };
+  requestAnimationFrame(frame);
 
   // Hooks for automated tests and debugging.
   (window as unknown as { __nugget: unknown }).__nugget = {
     get state() { return state; },
     get mode() { return mode; },
-    start,
+    get cutsceneTime() { return scene.cutscene.t; },
+    start: () => start(),
+    playCutscene,
+    skipCutscene: endCutscene,
+    seekCutscene: (t: number) => { scene.cutscene.t = t; },
     toMenu,
   };
 
   if (params.has('autostart')) start();
+  else if (params.has('cutscene')) playCutscene();
 }
 
 boot().catch((err) => {

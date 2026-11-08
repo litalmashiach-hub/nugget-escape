@@ -85,6 +85,8 @@ export type Status = 'intro' | 'playing' | 'caught' | 'won' | 'gameover';
 
 export interface GameOptions {
   noFamily?: boolean;
+  /** Start playing at once (the opening cutscene already showed the nugget hopping off the plate). */
+  skipIntro?: boolean;
   floors?: FloorDef[];
 }
 
@@ -154,8 +156,8 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
     held: new Set(),
     unlocked: new Set(),
     lives: settings.lives,
-    status: 'intro',
-    statusTimer: INTRO_TIME,
+    status: opts.skipIntro ? 'playing' : 'intro',
+    statusTimer: opts.skipIntro ? 0 : INTRO_TIME,
     time: 0,
     timesSpotted: 0,
     timesCaught: 0,

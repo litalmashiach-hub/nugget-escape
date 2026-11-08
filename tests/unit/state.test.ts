@@ -5,6 +5,7 @@ import {
 } from '../../src/game/state';
 import { botInput } from '../../src/game/bot';
 import type { KeyColor } from '../../src/game/types';
+import { START } from '../../src/game/levels';
 
 const DT = 1 / 60;
 const idle: Input = { mx: 0, my: 0, dash: false };
@@ -30,6 +31,14 @@ describe('starting a game', () => {
     expect(s.lives).toBe(3);
     expect(s.held.size).toBe(0);
     skipIntro(s);
+  });
+
+  it('after the opening cutscene the game starts at once, with the nugget off the plate', () => {
+    const s = createGame('normal', { skipIntro: true });
+    expect(s.status).toBe('playing');
+    expect(s.player.pos).toEqual({ x: START.x, y: START.y });
+    update(s, { mx: -1, my: 0, dash: false }, DT);
+    expect(s.player.pos.x).toBeLessThan(START.x);
   });
 
   it('difficulty changes lives', () => {

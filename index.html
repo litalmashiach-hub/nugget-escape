@@ -12,6 +12,23 @@
   <body>
     <div id="app">
       <div id="stage"></div>
+      <div class="vignette" aria-hidden="true"></div>
+      <div class="danger" id="danger" aria-hidden="true"></div>
+
+      <!-- Opening cutscene -->
+      <section class="cutscene" id="cutscene" hidden aria-label="Opening cutscene">
+        <div class="letterbox top"></div>
+        <div class="letterbox bottom">
+          <div class="cs-caption" id="cutscene-caption" hidden>
+            <span class="cs-who" id="cutscene-who"></span>
+            <span class="cs-text" id="cutscene-text"></span>
+          </div>
+          <div class="cs-progress"><i id="cutscene-progress"></i></div>
+        </div>
+        <button class="skip-btn" id="btn-skip">Skip <span aria-hidden="true">▸▸</span><small>Space</small></button>
+        <div class="cs-fade"></div>
+      </section>
+      <div class="fade" id="fade" hidden></div>
 
       <!-- In-game HUD -->
       <div id="hud" hidden>

@@ -32,10 +32,45 @@ test('title screen shows the game name, difficulty choices and Play', async ({ p
   expect(errors).toEqual([]);
 });
 
+test('Play opens the dinner cutscene, which can be skipped', async ({ page }) => {
+  const errors = await open(page);
+  await page.locator('#btn-play').click();
+  await expect(page.locator('#cutscene')).toBeVisible();
+  await expect(page.locator('#screen-title')).toBeHidden();
+  await expect(page.locator('#cutscene-text')).toContainText('Dinner time');
+  await expect(page.locator('#hud')).toBeHidden();
+  expect(await page.evaluate(() => (window as any).__nugget.mode)).toBe('cutscene');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#cutscene')).toBeHidden();
+  await expect(page.locator('#hud')).toBeVisible();
+  const s = await snap(page);
+  expect(s.mode).toBe('game');
+  expect(s.status).toBe('playing');
+  expect(errors).toEqual([]);
+});
+
+test('the cutscene plays to the end on its own and hands over to the game', async ({ page }) => {
+  const errors = await open(page, '?cutscene&speed=12');
+  await expect(page.locator('#cutscene')).toBeVisible();
+  const seen = new Set<string>();
+  await expect.poll(async () => {
+    const t = await page.locator('#cutscene-text').textContent().catch(() => '');
+    if (t) seen.add(t);
+    return page.evaluate(() => (window as any).__nugget.mode);
+  }, { timeout: 60_000, intervals: [100] }).toBe('game');
+  expect([...seen].join(' ')).toMatch(/blink|NOT dinner|catch that nugget|escape the house/i);
+  await expect(page.locator('#hud')).toBeVisible();
+  const s = await snap(page);
+  expect(s.status).toBe('playing');
+  expect(s.x).toBeCloseTo(16.5, 1);
+  expect(errors).toEqual([]);
+});
+
 test('Play starts the game with the HUD, 8 key slots and full lives', async ({ page }) => {
   const errors = await open(page);
   await page.locator('#diff-easy').click();
   await page.locator('#btn-play').click();
+  await page.locator('#btn-skip').click();
   await expect(page.locator('#hud')).toBeVisible();
   await expect(page.locator('#screen-title')).toBeHidden();
   await expect(page.locator('.key-slot')).toHaveCount(8);
@@ -118,6 +153,8 @@ test('phone: touch controls appear and nothing overflows @phone', async ({ page 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   expect(overflow).toBe(false);
   await page.locator('#btn-play').tap();
+  await expect(page.locator('#btn-skip')).toBeVisible();
+  await page.locator('#btn-skip').tap();
   await expect(page.locator('#touch')).toBeVisible();
   await expect(page.locator('#dash-btn')).toBeVisible();
   const before = await snap(page);

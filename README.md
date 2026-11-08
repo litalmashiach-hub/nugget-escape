@@ -2,7 +2,9 @@
 
 Just before the first bite, a chicken nugget blinks awake. Hop off the dinner plate, sneak through a three-floor house, find the colored keys and escape through the front door before the family eats you.
 
-A polished, all-ages browser game built with **PixiJS (WebGL)** and **TypeScript**.
+A polished, all-ages 3D browser game built with **Three.js (WebGL)** and **TypeScript**.
+
+It opens with a short cutscene: the family is at dinner, Dad lifts the nugget to his mouth, it blinks awake, jumps off his fork and runs. Press **Skip**, Space, Enter or Esc to jump straight to the game.
 
 ## How to play
 
@@ -31,14 +33,16 @@ Key chain: Red → Teal → Orange → Green → Purple → Blue → Pink → Go
 
 ## Tech
 
-- **PixiJS 8** renders everything on the GPU: additive lamp lighting, glowing keys, particles, vision cones that are blocked by walls, camera shake and smooth zoom.
-- All art is **procedurally painted** (Canvas 2D → GPU textures) and all sound and music is **synthesized** with the Web Audio API, so there are no image or audio files to load.
+- **Three.js** renders the house in 3D: every floor, wall, door and piece of furniture is built from code, with soft shadows, warm lamp lights, spinning keys, particles and vision cones that are blocked by walls. Walls between the camera and the nugget are cut away so it is never hidden.
+- The family, Biscuit the dog and the nugget are low-poly models made of primitives, with walking, sitting and reaching animations.
+- On slow or software GPUs the game switches to a lighter mode (no shadows or lamp lights). Force it with `?lowfx`, or force full quality with `?hifx`.
+- Floor patterns, key symbols and icons are **procedurally painted** with Canvas 2D, and all sound and music is **synthesized** with the Web Audio API, so there are no image or audio files to load.
 - Game rules (`src/game/`) are plain TypeScript with no rendering code, so they are fully unit-tested.
 
 ```
 src/
   game/      rules: levels, map, movement, vision, path finding, family AI, autopilot, solver
-  render/    PixiJS scene, procedural art, characters
+  render/    Three.js scene, house builder, furniture, characters, opening cutscene
   audio/     synthesized sound effects and music
   ui/        HUD, minimap, toasts
 tests/
@@ -57,7 +61,7 @@ npm run build        # production build in dist/
 npm run build:single # one self-contained HTML file in dist-single/
 ```
 
-Handy URL options for testing: `?autostart`, `?difficulty=easy|normal|hard`, `?nofamily`, `?bot` (autopilot), `?speed=4`.
+Handy URL options for testing: `?autostart` (skips the cutscene), `?cutscene` (plays it right away), `?difficulty=easy|normal|hard`, `?nofamily`, `?bot` (autopilot), `?speed=4`.
 
 ## Deploying
 

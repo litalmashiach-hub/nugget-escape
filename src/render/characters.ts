@@ -1,8 +1,155 @@
-import { Container, Graphics, Sprite, Texture } from 'pixi.js';
+/**
+ * Low-poly 3D characters built from primitives: the nugget, the family and Biscuit the dog.
+ * Every model faces +z by default; `faceAngle` converts a map facing angle to rotation.y.
+ */
+import { THREE, GEO, mat, builder, ball, cyl, cbox, type Builder } from './kit';
+import { rng } from './paint';
 import type { FamilyKind } from '../game/types';
-import { drawNuggetBody, makeCanvas } from './paint';
 
-type View = 'front' | 'back' | 'side';
+/** Map facing (atan2 of map dy, dx) to a rotation around +y for a model that faces +z. */
+export const faceAngle = (facing: number) => Math.PI / 2 - facing;
+
+function pivot(parent: THREE.Object3D, x: number, y: number, z: number) {
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  parent.add(g);
+  return g;
+}
+
+function limb(b: Builder, parent: THREE.Object3D, r: number, len: number, color: string) {
+  const m = new THREE.Mesh(GEO.cyl, mat(color, { rough: 0.85 }));
+  m.scale.set(r * 2, len, r * 2);
+  m.position.y = -len / 2;
+  m.castShadow = true;
+  parent.add(m);
+  void b;
+  return m;
+}
+
+// ---------------------------------------------------------------- nugget
+
+function nuggetGeometry() {
+  const g = new THREE.SphereGeometry(0.5, 30, 20);
+  const pos = g.attributes.position;
+  const colors: number[] = [];
+  const R = rng(11);
+  const light = new THREE.Color('#f6c25a'), dark = new THREE.Color('#c27420'), crumb = new THREE.Color('#ffe39a');
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const a = Math.atan2(v.z, v.x), e = Math.asin(Math.max(-1, Math.min(1, v.y / 0.5)));
+    const bump = 1 + Math.sin(a * 5 + 1.3) * 0.05 + Math.sin(e * 7 + a * 3) * 0.04 + (R() - 0.5) * 0.05;
+    v.multiplyScalar(bump);
+    pos.setXYZ(i, v.x, v.y, v.z);
+    const c = dark.clone().lerp(light, Math.min(1, Math.max(0, 0.45 + v.y * 1.1 + (R() - 0.5) * 0.4)));
+    if (R() < 0.12) c.lerp(crumb, 0.6);
+    colors.push(c.r, c.g, c.b);
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+let nuggetGeo: THREE.BufferGeometry | null = null;
+
+export class NuggetModel {
+  readonly root = new THREE.Group();
+  readonly inner = new THREE.Group();
+  private bodyMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, transparent: true });
+  private body: THREE.Mesh;
+  private legL: THREE.Group;
+  private legR: THREE.Group;
+  private armL: THREE.Group;
+  private armR: THREE.Group;
+  private eyes: THREE.Group;
+  private smile: THREE.Mesh;
+  private ooh: THREE.Mesh;
+  private allMats: THREE.Material[] = [];
+  private blinkT = 2;
+  mood: 'happy' | 'scared' = 'happy';
+  /** 0 = asleep (eyes shut, it's just food), 1 = wide awake. */
+  awake = 1;
+  opacity = 1;
+
+  constructor() {
+    nuggetGeo ??= nuggetGeometry();
+    const b = builder(false, false);
+    this.root.add(this.inner);
+    this.body = new THREE.Mesh(nuggetGeo, this.bodyMat);
+    this.body.scale.set(0.5, 0.4, 0.38);
+    this.body.position.y = 0.3;
+    this.body.castShadow = true;
+    this.inner.add(this.body);
+
+    const legCol = '#8a4a12';
+    this.legL = pivot(this.inner, -0.09, 0.16, 0);
+    this.legR = pivot(this.inner, 0.09, 0.16, 0);
+    for (const leg of [this.legL, this.legR]) {
+      limb(b, leg, 0.022, 0.14, legCol);
+      leg.add(ball(b, 0, -0.15, 0.02, 0.07, 0.04, 0.09, legCol));
+    }
+    this.armL = pivot(this.inner, -0.24, 0.32, 0);
+    this.armR = pivot(this.inner, 0.24, 0.32, 0);
+    for (const [arm, s] of [[this.armL, -1], [this.armR, 1]] as const) {
+      limb(b, arm, 0.018, 0.12, legCol);
+      arm.add(ball(b, 0, -0.13, 0, 0.05, 0.05, 0.05, legCol));
+      arm.rotation.z = s * 0.5;
+    }
+
+    this.eyes = pivot(this.inner, 0, 0.36, 0.155);
+    for (const s of [-1, 1]) {
+      this.eyes.add(ball(b, s * 0.075, 0, 0, 0.09, 0.105, 0.05, '#ffffff', { rough: 0.3 }));
+      this.eyes.add(ball(b, s * 0.075, -0.005, 0.022, 0.045, 0.05, 0.02, '#2a1606', { rough: 0.2 }));
+      this.eyes.add(ball(b, s * 0.075 - 0.012, 0.012, 0.03, 0.014, 0.014, 0.01, '#ffffff', { emissive: '#ffffff' }));
+      this.eyes.add(ball(b, s * 0.14, -0.07, 0.0, 0.05, 0.03, 0.02, '#f06e50', { rough: 0.9 }));
+    }
+    const smileGeo = new THREE.TorusGeometry(0.045, 0.011, 6, 14, Math.PI);
+    this.smile = new THREE.Mesh(smileGeo, mat('#5a2c06'));
+    this.smile.rotation.z = Math.PI;
+    this.smile.position.set(0, 0.29, 0.178);
+    this.inner.add(this.smile);
+    this.ooh = new THREE.Mesh(GEO.sphere, mat('#7a2a10'));
+    this.ooh.scale.set(0.04, 0.05, 0.02);
+    this.ooh.position.set(0, 0.27, 0.178);
+    this.inner.add(this.ooh);
+    this.root.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        o.castShadow = true;
+        if (!this.allMats.includes(o.material)) {
+          // own materials so the nugget can fade while hidden
+          if (o !== this.body) o.material = (o.material as THREE.Material).clone();
+          this.allMats.push(o.material as THREE.Material);
+        }
+      }
+    });
+    for (const m of this.allMats) m.transparent = true;
+  }
+
+  animate(facing: number, moving: boolean, phase: number, dt: number, dashing = false) {
+    this.root.rotation.y = faceAngle(facing);
+    const swing = moving ? Math.sin(phase) * 0.9 : 0;
+    this.legL.rotation.x = swing;
+    this.legR.rotation.x = -swing;
+    this.armL.rotation.x = -swing * 0.8;
+    this.armR.rotation.x = swing * 0.8;
+    this.inner.position.y = moving ? Math.abs(Math.sin(phase)) * 0.05 : Math.sin(phase * 0.3) * 0.004;
+    this.inner.rotation.x = dashing ? 0.35 : moving ? 0.12 : 0;
+    const scared = this.mood === 'scared';
+    this.smile.visible = !scared;
+    this.ooh.visible = scared;
+    this.armL.rotation.z = scared ? -2.2 : -0.5;
+    this.armR.rotation.z = scared ? 2.2 : 0.5;
+    // blinking
+    this.blinkT -= dt;
+    if (this.blinkT < -0.12) this.blinkT = 2 + Math.random() * 3;
+    const blink = this.blinkT < 0 ? 0.1 : 1;
+    this.eyes.scale.y = Math.max(0.06, this.awake * blink * (scared ? 1.2 : 1));
+    this.smile.visible &&= this.awake > 0.5;
+    for (const m of this.allMats) m.opacity = this.opacity;
+  }
+}
+
+// ---------------------------------------------------------------- people
 
 interface Look {
   shirt: string;
@@ -16,283 +163,235 @@ interface Look {
 const LOOKS: Record<Exclude<FamilyKind, 'dog'>, Look> = {
   dad: { shirt: '#4a6fa5', pants: '#3b3b4f', skin: '#f1c27d', hair: '#5b3a29', scale: 1.05 },
   mom: { shirt: '#2e9e74', pants: '#2c3e66', skin: '#e0ac69', hair: '#a0442a', scale: 1 },
-  sister: { shirt: '#8e5cc9', pants: '#26262e', skin: '#c68642', hair: '#1d1d1d', scale: 0.95, extra: '#f2679f' },
-  grandma: { shirt: '#d9779b', pants: '#6b5b95', skin: '#f3d2b3', hair: '#dcdcdc', scale: 0.95 },
-  brother: { shirt: '#f68b2a', pants: '#3a6ea5', skin: '#ffdbac', hair: '#e6be5a', scale: 0.8, extra: '#d63c3c' },
+  sister: { shirt: '#8e5cc9', pants: '#26262e', skin: '#c68642', hair: '#1d1d1d', scale: 0.92, extra: '#f2679f' },
+  grandma: { shirt: '#d9779b', pants: '#6b5b95', skin: '#f3d2b3', hair: '#dcdcdc', scale: 0.93 },
+  brother: { shirt: '#f68b2a', pants: '#3a6ea5', skin: '#ffdbac', hair: '#e6be5a', scale: 0.78, extra: '#d63c3c' },
 };
 
-const viewOf = (facing: number): { view: View; flip: boolean } => {
-  const a = Math.atan2(Math.sin(facing), Math.cos(facing));
-  if (a > Math.PI / 4 && a < (3 * Math.PI) / 4) return { view: 'front', flip: false };
-  if (a < -Math.PI / 4 && a > (-3 * Math.PI) / 4) return { view: 'back', flip: false };
-  return { view: 'side', flip: Math.abs(a) > Math.PI / 2 };
-};
-
-export class PersonSprite extends Container {
-  private kind: Exclude<FamilyKind, 'dog'>;
-  private look: Look;
-  private body = new Container();
-  private shadow = new Graphics();
-  private legL = new Graphics();
-  private legR = new Graphics();
-  private armL = new Graphics();
-  private armR = new Graphics();
-  private torso = new Graphics();
-  private head = new Graphics();
-  private view: View | null = null;
+export class PersonModel {
+  readonly root = new THREE.Group();
+  readonly body = new THREE.Group();
+  readonly kind: Exclude<FamilyKind, 'dog'>;
+  readonly height: number;
+  private scale: number;
+  private hipL: THREE.Group;
+  private hipR: THREE.Group;
+  private kneeL: THREE.Group;
+  private kneeR: THREE.Group;
+  readonly armL: THREE.Group;
+  readonly armR: THREE.Group;
+  readonly head: THREE.Group;
+  private mouth: THREE.Mesh;
   lunge = 0;
+  /** 0 standing .. 1 seated on a chair. */
+  sit = 0;
+  /** Cutscene overrides: when set, arms keep these x rotations. */
+  armPose: { l: number; r: number } | null = null;
+  mouthOpen = 0;
+  talk = 0;
 
   constructor(kind: Exclude<FamilyKind, 'dog'>) {
-    super();
     this.kind = kind;
-    this.look = LOOKS[kind];
-    this.shadow.ellipse(0, 0, 17, 6).fill({ color: 0x000000, alpha: 0.3 });
-    this.addChild(this.shadow, this.body);
-    for (const leg of [this.legL, this.legR]) {
-      leg.roundRect(-3.5, 0, 7, 15, 3).fill(this.look.pants);
-      leg.ellipse(0, 15, 4.5, 3).fill('#2a211c');
+    const L = LOOKS[kind];
+    const b = builder(false, false);
+    this.root.add(this.body);
+    this.body.scale.setScalar(L.scale);
+    this.height = 1.78 * L.scale;
+    this.scale = L.scale;
+
+    // legs: hip -> knee -> foot
+    this.hipL = pivot(this.body, -0.11, 0.8, 0);
+    this.hipR = pivot(this.body, 0.11, 0.8, 0);
+    const knees: THREE.Group[] = [];
+    for (const hip of [this.hipL, this.hipR]) {
+      limb(b, hip, 0.075, 0.42, L.pants);
+      const knee = pivot(hip, 0, -0.4, 0);
+      limb(b, knee, 0.065, 0.38, L.pants);
+      knee.add(cbox(b, 0, -0.38, 0.05, 0.13, 0.08, 0.24, '#2a211c'));
+      knees.push(knee);
     }
-    this.legL.position.set(-6, -15);
-    this.legR.position.set(6, -15);
+    [this.kneeL, this.kneeR] = knees;
+
+    // torso
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.38, 6, 14), mat(L.shirt, { rough: 0.85 }));
+    torso.scale.set(1, 1, 0.75);
+    torso.position.y = 1.12;
+    torso.castShadow = true;
+    this.body.add(torso);
+    if (kind === 'grandma') {
+      const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 0.42, 16), mat(L.pants));
+      skirt.position.y = 0.78;
+      skirt.castShadow = true;
+      this.body.add(skirt);
+    }
+    // collar
+    this.body.add(cbox(b, 0, 1.43, 0.12, 0.16, 0.05, 0.04, '#ffffff'));
+    if (kind === 'dad') this.body.add(cbox(b, 0, 1.25, 0.165, 0.06, 0.28, 0.02, '#c0392b')); // tie
+
+    // arms
+    this.armL = pivot(this.body, -0.29, 1.4, 0);
+    this.armR = pivot(this.body, 0.29, 1.4, 0);
     for (const arm of [this.armL, this.armR]) {
-      arm.roundRect(-3.5, 0, 7, 20, 3.5).fill(this.look.shirt);
-      arm.circle(0, 20, 4).fill(this.look.skin);
+      limb(b, arm, 0.062, 0.56, L.shirt);
+      arm.add(ball(b, 0, -0.6, 0, 0.13, 0.13, 0.13, L.skin));
     }
-    this.armL.position.set(-15, -40);
-    this.armR.position.set(15, -40);
-    this.body.addChild(this.legL, this.legR, this.armL, this.torso, this.armR, this.head);
-    this.body.scale.set(this.look.scale);
-    this.setView('front');
-  }
 
-  private setView(view: View) {
-    if (view === this.view) return;
-    this.view = view;
-    const L = this.look;
-    const t = this.torso;
-    t.clear();
-    const skirt = this.kind === 'grandma';
-    if (skirt) t.poly([-15, -12, 15, -12, 12, -30, -12, -30]).fill(L.pants);
-    t.roundRect(-13, -42, 26, 30, 9).fill(L.shirt);
-    t.roundRect(-13, -42, 26, 30, 9).stroke({ width: 1.5, color: 0x000000, alpha: 0.18 });
-    if (view === 'front') {
-      t.poly([-5, -42, 0, -35, 5, -42]).fill({ color: 0xffffff, alpha: 0.85 });
-      if (this.kind === 'sister') t.roundRect(-8, -26, 16, 9, 3).fill({ color: 0x000000, alpha: 0.15 }); // hoodie pocket
-      if (this.kind === 'dad') t.rect(-13, -17, 26, 3).fill('#2b2b33');
+    // head
+    this.head = pivot(this.body, 0, 1.68, 0);
+    this.head.add(ball(b, 0, 0, 0, 0.36, 0.38, 0.36, L.skin, { rough: 0.7 }));
+    for (const s of [-1, 1]) {
+      this.head.add(ball(b, s * 0.07, 0.03, 0.165, 0.045, 0.055, 0.02, '#1d1410', { rough: 0.2 }));
+      this.head.add(ball(b, s * 0.06, 0.045, 0.172, 0.014, 0.014, 0.008, '#ffffff', { emissive: '#ffffff' }));
+      this.head.add(ball(b, s * 0.12, -0.04, 0.14, 0.05, 0.03, 0.02, '#e88a7a'));
+      this.head.add(ball(b, s * 0.18, 0, 0, 0.06, 0.09, 0.06, L.skin)); // ears
     }
-    this.drawHead(view);
-    // arm layering for side view
-    this.body.setChildIndex(this.armL, view === 'side' ? 0 : 2);
-  }
+    this.head.add(ball(b, 0, -0.01, 0.185, 0.05, 0.05, 0.05, L.skin)); // nose
+    this.mouth = new THREE.Mesh(GEO.sphere, mat('#7a2a20'));
+    this.mouth.scale.set(0.08, 0.02, 0.02);
+    this.mouth.position.set(0, -0.08, 0.165);
+    this.head.add(this.mouth);
 
-  private drawHead(view: View) {
-    const h = this.head;
-    const L = this.look;
-    h.clear();
-    const cy = -55;
-    h.circle(0, cy, 15).fill(L.skin);
-    h.circle(0, cy, 15).stroke({ width: 1.5, color: 0x000000, alpha: 0.15 });
-    // hair
-    switch (this.kind) {
+    // hair styles
+    const hair = L.hair;
+    switch (kind) {
       case 'dad':
-        if (view === 'back') h.circle(0, cy - 1, 15).fill(L.hair);
-        else h.ellipse(view === 'side' ? -3 : 0, cy - 9, 15, 8).fill(L.hair);
+        this.head.add(ball(b, 0, 0.08, -0.02, 0.38, 0.28, 0.38, hair));
+        this.head.add(cbox(b, 0, -0.045, 0.18, 0.1, 0.025, 0.02, hair)); // mustache
         break;
       case 'mom':
-        if (view === 'back') { h.circle(0, cy - 1, 15.5).fill(L.hair); h.roundRect(-10, cy + 4, 20, 16, 8).fill(L.hair); }
-        else {
-          h.ellipse(0, cy - 8, 16, 9).fill(L.hair);
-          if (view === 'front') { h.roundRect(-17, cy - 6, 7, 20, 4).fill(L.hair); h.roundRect(10, cy - 6, 7, 20, 4).fill(L.hair); }
-          else h.roundRect(-17, cy - 6, 10, 22, 5).fill(L.hair);
-        }
+        this.head.add(ball(b, 0, 0.07, -0.03, 0.4, 0.32, 0.4, hair));
+        this.head.add(ball(b, 0, -0.12, -0.12, 0.34, 0.42, 0.2, hair));
         break;
       case 'sister':
-        if (view === 'back') h.circle(0, cy - 1, 15.5).fill(L.hair);
-        else h.ellipse(0, cy - 8, 15.5, 8).fill(L.hair);
-        h.circle(0, cy - 17, 7).fill(L.hair);
-        // headphones
-        h.arc(0, cy - 2, 17, Math.PI * 1.05, Math.PI * 1.95).stroke({ width: 3, color: L.extra });
-        if (view !== 'side') { h.roundRect(-19, cy - 4, 6, 10, 3).fill(L.extra!); h.roundRect(13, cy - 4, 6, 10, 3).fill(L.extra!); }
-        else h.roundRect(-4, cy - 4, 7, 11, 3).fill(L.extra!);
+        this.head.add(ball(b, 0, 0.07, -0.02, 0.39, 0.3, 0.39, hair));
+        this.head.add(ball(b, 0, 0.0, -0.22, 0.12, 0.3, 0.12, hair)); // ponytail
+        this.head.add(cbox(b, 0, 0.16, 0.0, 0.36, 0.04, 0.3, L.extra!)); // headband
         break;
-      case 'grandma':
-        if (view === 'back') h.circle(0, cy - 1, 15).fill(L.hair);
-        else h.ellipse(0, cy - 9, 15.5, 8).fill(L.hair);
-        h.circle(view === 'side' ? -9 : 0, cy - 16, 7).fill(L.hair);
+      case 'grandma': {
+        this.head.add(ball(b, 0, 0.07, -0.03, 0.39, 0.3, 0.39, hair));
+        this.head.add(ball(b, 0, 0.2, -0.1, 0.16, 0.14, 0.16, hair)); // bun
+        const glasses = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.008, 6, 16), mat('#6b4f3a', { metal: 0.4 }));
+        for (const s of [-1, 1]) {
+          const g = glasses.clone();
+          g.position.set(s * 0.07, 0.035, 0.18);
+          this.head.add(g);
+        }
         break;
+      }
       case 'brother':
-        if (view === 'back') h.circle(0, cy - 1, 15).fill(L.hair);
-        else h.ellipse(0, cy - 8, 15, 8).fill(L.hair);
-        // cap
-        h.ellipse(0, cy - 11, 14, 7).fill(L.extra!);
-        if (view === 'front') h.ellipse(0, cy - 6, 10, 3.5).fill('#a82a2a');
-        else if (view === 'side') h.ellipse(10, cy - 8, 9, 3).fill('#a82a2a');
+        this.head.add(ball(b, 0, 0.06, -0.02, 0.38, 0.28, 0.38, hair));
+        this.head.add(ball(b, 0, 0.1, 0, 0.39, 0.22, 0.39, L.extra!)); // cap
+        this.head.add(cbox(b, 0, 0.1, 0.2, 0.22, 0.03, 0.16, L.extra!)); // cap brim
         break;
     }
-    // face
-    if (view === 'front') {
-      for (const s of [-1, 1]) {
-        h.ellipse(s * 5.5, cy + 1, 2.2, 3).fill('#2a1a12');
-        h.circle(s * 5.5 - 0.7, cy - 0.2, 0.8).fill('#ffffff');
-        h.ellipse(s * 9, cy + 6, 3, 1.8).fill({ color: 0xff7a7a, alpha: 0.35 });
-      }
-      h.arc(0, cy + 6, 4, 0.2 * Math.PI, 0.8 * Math.PI).stroke({ width: 1.6, color: '#6b2a1a' });
-      if (this.kind === 'dad' || this.kind === 'grandma') {
-        h.circle(-5.5, cy + 1, 4.5).stroke({ width: 1.3, color: '#333' });
-        h.circle(5.5, cy + 1, 4.5).stroke({ width: 1.3, color: '#333' });
-        h.moveTo(-1, cy + 1).lineTo(1, cy + 1).stroke({ width: 1.3, color: '#333' });
-      }
-    } else if (view === 'side') {
-      h.ellipse(8, cy + 1, 2, 3).fill('#2a1a12');
-      h.circle(14.5, cy + 4, 2.5).fill(L.skin);
-      h.ellipse(6, cy + 6, 2.6, 1.6).fill({ color: 0xff7a7a, alpha: 0.35 });
-      if (this.kind === 'dad' || this.kind === 'grandma') h.circle(8, cy + 1, 4.5).stroke({ width: 1.3, color: '#333' });
-    }
+    this.root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
   }
 
-  animate(facing: number, moving: boolean, phase: number, dt: number) {
-    const { view, flip } = viewOf(facing);
-    this.setView(view);
-    this.body.scale.x = (flip ? -1 : 1) * this.look.scale;
-    const swing = moving ? Math.sin(phase) : 0;
-    if (view === 'side') {
-      this.legL.position.set(-3 + swing * 5, -15);
-      this.legR.position.set(3 - swing * 5, -15);
-      this.legL.y = this.legR.y = -15;
+  animate(facing: number | null, moving: boolean, phase: number, dt: number) {
+    if (facing !== null) this.root.rotation.y = faceAngle(facing);
+    const swing = moving ? Math.sin(phase) * 0.7 : 0;
+    const sit = this.sit;
+    this.hipL.rotation.x = swing * (1 - sit) - sit * Math.PI / 2;
+    this.hipR.rotation.x = -swing * (1 - sit) - sit * Math.PI / 2;
+    this.kneeL.rotation.x = (moving ? Math.max(0, -Math.sin(phase)) * 0.6 : 0) + sit * Math.PI / 2;
+    this.kneeR.rotation.x = (moving ? Math.max(0, Math.sin(phase)) * 0.6 : 0) + sit * Math.PI / 2;
+    this.body.position.y = (moving ? Math.abs(Math.cos(phase)) * 0.04 : 0) - sit * (0.8 * this.scale - 0.6);
+    this.lunge = Math.max(0, this.lunge - dt * 1.4);
+    if (this.armPose) {
+      this.armL.rotation.x = this.armPose.l;
+      this.armR.rotation.x = this.armPose.r;
     } else {
-      this.legL.position.set(-6, -15 - Math.max(0, swing) * 3);
-      this.legR.position.set(6, -15 - Math.max(0, -swing) * 3);
+      const reach = this.lunge > 0 ? -1.5 * Math.min(1, this.lunge * 2) : 0;
+      this.armL.rotation.x = -swing + reach;
+      this.armR.rotation.x = swing + reach;
     }
-    const lunge = this.lunge;
-    this.armL.rotation = swing * 0.6 + (view === 'side' ? 0 : 0.1) - lunge * 2.2;
-    this.armR.rotation = -swing * 0.6 - (view === 'side' ? 0 : 0.1) + lunge * 2.2 * (view === 'side' ? -1 : 1);
-    this.body.y = moving ? -Math.abs(Math.sin(phase)) * 2.5 : Math.sin(performance.now() / 600) * 0.6;
-    this.lunge = Math.max(0, this.lunge - dt * 2);
+    this.armL.rotation.z = -0.08;
+    this.armR.rotation.z = 0.08;
+    this.body.rotation.x = this.lunge > 0 ? 0.25 * Math.min(1, this.lunge * 2) : 0;
+    const talking = this.talk > 0 ? Math.abs(Math.sin(phase * 2.2)) : 0;
+    const open = Math.max(this.mouthOpen, talking * 0.6);
+    this.mouth.scale.set(0.08 - open * 0.02, 0.02 + open * 0.07, 0.02);
   }
 }
 
-export class DogSprite extends Container {
-  private body = new Container();
-  private tail = new Graphics();
-  private legs: Graphics[] = [];
-  private wag = 0;
+// ---------------------------------------------------------------- dog
+
+export class DogModel {
+  readonly root = new THREE.Group();
+  readonly body = new THREE.Group();
+  private legs: THREE.Group[] = [];
+  private tail: THREE.Group;
+  readonly head: THREE.Group;
+  private earL: THREE.Group;
+  private earR: THREE.Group;
+  readonly height = 0.75;
+  /** 0 standing .. 1 sitting (begging at dinner). */
+  sit = 0;
+  excited = 0;
 
   constructor() {
-    super();
-    const shadow = new Graphics().ellipse(0, 2, 20, 10).fill({ color: 0x000000, alpha: 0.28 });
-    this.addChild(shadow, this.body);
-    const fur = '#d9a35b', dark = '#a86f2c';
-    for (const [x, y] of [[9, -9], [9, 9], [-9, -9], [-9, 9]]) {
-      const leg = new Graphics().ellipse(0, 0, 4.5, 3.5).fill(dark);
-      leg.position.set(x, y);
+    const b = builder(false, false);
+    const fur = '#c8955a', dark = '#7a4f2a', light = '#f1dcc0';
+    this.root.add(this.body);
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.42, 6, 14), mat(fur));
+    torso.rotation.x = Math.PI / 2;
+    torso.position.y = 0.45;
+    torso.castShadow = true;
+    this.body.add(torso);
+    this.body.add(ball(b, 0, 0.4, 0.12, 0.26, 0.24, 0.3, light)); // chest patch
+    for (const [x, z] of [[-0.1, 0.22], [0.1, 0.22], [-0.1, -0.22], [0.1, -0.22]]) {
+      const leg = pivot(this.body, x, 0.38, z);
+      limb(b, leg, 0.045, 0.34, fur);
+      leg.add(ball(b, 0, -0.35, 0.02, 0.1, 0.06, 0.12, light));
       this.legs.push(leg);
-      this.body.addChild(leg);
     }
-    this.tail.roundRect(-14, -2.5, 14, 5, 2.5).fill(fur);
-    this.tail.position.set(-14, 0);
-    this.body.addChild(this.tail);
-    const torso = new Graphics()
-      .ellipse(0, 0, 17, 11).fill(fur)
-      .ellipse(-2, 0, 10, 6).fill({ color: 0xffffff, alpha: 0.12 })
-      .roundRect(8, -10, 4, 20, 2).fill('#e8424a'); // collar
-    const head = new Graphics()
-      .circle(18, 0, 9.5).fill(fur)
-      .ellipse(26, 0, 6, 5).fill('#f0d0a0')
-      .circle(31, 0, 2.6).fill('#2a1a12')
-      .ellipse(15, -9, 6, 3.5).fill(dark)
-      .ellipse(15, 9, 6, 3.5).fill(dark)
-      .circle(21, -4, 1.7).fill('#1a1a1a')
-      .circle(21, 4, 1.7).fill('#1a1a1a');
-    const tag = new Graphics().circle(12, 0, 2.5).fill('#f5c518');
-    this.body.addChild(torso, head, tag);
-    this.body.scale.set(0.9);
+    this.tail = pivot(this.body, 0, 0.52, -0.36);
+    const t = limb(b, this.tail, 0.03, 0.26, fur);
+    t.rotation.x = 0;
+    this.tail.rotation.x = -2.3;
+    this.head = pivot(this.body, 0, 0.66, 0.34);
+    this.head.add(ball(b, 0, 0, 0, 0.3, 0.28, 0.3, fur));
+    this.head.add(ball(b, 0, -0.05, 0.16, 0.16, 0.13, 0.18, light)); // snout
+    this.head.add(ball(b, 0, -0.01, 0.25, 0.06, 0.05, 0.05, '#1d1410', { rough: 0.3 })); // nose
+    for (const s of [-1, 1]) {
+      this.head.add(ball(b, s * 0.07, 0.06, 0.13, 0.05, 0.06, 0.03, '#1d1410', { rough: 0.2 }));
+      this.head.add(ball(b, s * 0.06, 0.075, 0.143, 0.015, 0.015, 0.01, '#ffffff', { emissive: '#ffffff' }));
+    }
+    this.earL = pivot(this.head, -0.13, 0.08, -0.02);
+    this.earR = pivot(this.head, 0.13, 0.08, -0.02);
+    for (const ear of [this.earL, this.earR]) ear.add(ball(b, 0, -0.1, 0, 0.08, 0.22, 0.12, dark));
+    this.head.add(cyl(b, 0, -0.17, 0.0, 0.13, 0.05, '#d63c3c')); // collar
+    const tag = ball(b, 0, -0.2, 0.13, 0.05, 0.05, 0.02, '#f5c518', { metal: 0.7, rough: 0.3 });
+    this.head.add(tag);
+    this.root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
   }
 
-  animate(facing: number, moving: boolean, phase: number, dt: number) {
-    this.body.rotation = facing;
-    this.wag += dt * (moving ? 18 : 8);
-    this.tail.rotation = Math.sin(this.wag) * 0.5;
-    this.legs.forEach((l, i) => {
-      const s = moving ? Math.sin(phase + (i % 2 ? Math.PI : 0)) * 3 : 0;
-      l.x = (i < 2 ? 9 : -9) + s;
-    });
-    this.body.y = -4;
+  animate(facing: number | null, moving: boolean, phase: number, dt: number, time: number) {
+    void dt;
+    if (facing !== null) this.root.rotation.y = faceAngle(facing);
+    const swing = moving ? Math.sin(phase * 1.3) * 0.8 : 0;
+    const sit = this.sit;
+    this.legs[0].rotation.x = swing;
+    this.legs[3].rotation.x = swing;
+    this.legs[1].rotation.x = -swing;
+    this.legs[2].rotation.x = -swing;
+    // sitting: tip the body back, fold the back legs
+    this.body.rotation.x = -sit * 0.6;
+    this.body.position.set(0, (moving ? Math.abs(Math.sin(phase * 1.3)) * 0.05 : 0) - sit * 0.08, -sit * 0.05);
+    this.legs[2].rotation.x += sit * 1.2;
+    this.legs[3].rotation.x += sit * 1.2;
+    this.legs[0].rotation.x += sit * 0.6;
+    this.legs[1].rotation.x += sit * 0.6;
+    const wag = 6 + this.excited * 10;
+    this.tail.rotation.z = Math.sin(time * wag) * (0.4 + this.excited * 0.4);
+    this.earL.rotation.z = -0.15 + (moving ? Math.sin(phase * 1.3) * 0.25 : 0);
+    this.earR.rotation.z = 0.15 - (moving ? Math.sin(phase * 1.3) * 0.25 : 0);
+    this.head.rotation.x = sit * 0.5 + (this.excited ? Math.sin(time * 18) * 0.06 * this.excited : 0);
   }
 }
 
-let nuggetTex: Texture | null = null;
-export function nuggetTexture() {
-  if (!nuggetTex) {
-    const { c, ctx } = makeCanvas(40, 40, 3);
-    ctx.translate(20, 20);
-    drawNuggetBody(ctx, 15);
-    nuggetTex = Texture.from(c);
-  }
-  return nuggetTex;
-}
+export type FamilyModel = PersonModel | DogModel;
 
-export class NuggetSprite extends Container {
-  readonly inner = new Container();
-  private shadow = new Graphics();
-  private legs = new Graphics();
-  private arms = new Graphics();
-  private body: Sprite;
-  private face = new Graphics();
-  mood: 'happy' | 'scared' = 'happy';
-  private blinkT = 2;
-
-  constructor() {
-    super();
-    this.shadow.ellipse(0, 0, 13, 5).fill({ color: 0x000000, alpha: 0.32 });
-    this.body = new Sprite(nuggetTexture());
-    this.body.anchor.set(0.5);
-    this.body.scale.set(1 / 3);
-    this.inner.addChild(this.legs, this.arms, this.body, this.face);
-    this.addChild(this.shadow, this.inner);
-  }
-
-  animate(facing: number, moving: boolean, phase: number, dt: number, dashing: boolean) {
-    const bob = moving ? Math.abs(Math.sin(phase)) : 0;
-    this.inner.y = -14 - bob * 4;
-    const squash = moving ? 1 + Math.sin(phase * 2) * 0.05 : 1 + Math.sin(performance.now() / 400) * 0.02;
-    this.body.scale.set((1 / 3) * (2 - squash) * (dashing ? 1.12 : 1), (1 / 3) * squash * (dashing ? 0.9 : 1));
-    const lx = Math.cos(facing), ly = Math.sin(facing);
-    // legs
-    const g = this.legs;
-    g.clear();
-    const s = moving ? Math.sin(phase) * 4 : 0;
-    g.moveTo(-5, 8).lineTo(-6 + s, 16 + bob * 2).stroke({ width: 3, color: '#7a3f0c', cap: 'round' });
-    g.moveTo(5, 8).lineTo(6 - s, 16 + bob * 2).stroke({ width: 3, color: '#7a3f0c', cap: 'round' });
-    g.ellipse(-6 + s, 16.5 + bob * 2, 3, 1.8).fill('#5a2c06');
-    g.ellipse(6 - s, 16.5 + bob * 2, 3, 1.8).fill('#5a2c06');
-    // arms (wave when scared)
-    const a = this.arms;
-    a.clear();
-    const wave = this.mood === 'scared' ? Math.sin(performance.now() / 60) * 5 : moving ? Math.sin(phase) * 3 : 0;
-    a.moveTo(-14, 0).lineTo(-20, -4 - wave).stroke({ width: 3, color: '#7a3f0c', cap: 'round' });
-    a.moveTo(14, 0).lineTo(20, -4 + wave).stroke({ width: 3, color: '#7a3f0c', cap: 'round' });
-    // face
-    this.blinkT -= dt;
-    const blinking = this.blinkT < 0.12;
-    if (this.blinkT < 0) this.blinkT = 2 + Math.random() * 3;
-    const f = this.face;
-    f.clear();
-    const r = 15;
-    const ex = lx * 2.2, ey = ly * 1.6;
-    for (const sx of [-1, 1]) {
-      if (blinking) {
-        f.moveTo(sx * r * 0.34 - 3.5 + ex, -r * 0.16 + ey).lineTo(sx * r * 0.34 + 3.5 + ex, -r * 0.16 + ey).stroke({ width: 1.6, color: '#2a1606' });
-        continue;
-      }
-      const big = this.mood === 'scared' ? 1.18 : 1;
-      f.ellipse(sx * r * 0.34 + ex * 0.5, -r * 0.18 + ey * 0.5, r * 0.24 * big, r * 0.28 * big).fill('#ffffff');
-      f.ellipse(sx * r * 0.34 + ex * 0.5, -r * 0.18 + ey * 0.5, r * 0.24 * big, r * 0.28 * big).stroke({ width: 1, color: '#5a2c06' });
-      f.circle(sx * r * 0.34 + ex, -r * 0.14 + ey, r * (this.mood === 'scared' ? 0.09 : 0.12)).fill('#2a1606');
-      f.circle(sx * r * 0.34 + ex - 0.8, -r * 0.19 + ey, r * 0.04).fill('#ffffff');
-    }
-    f.ellipse(-r * 0.6 + ex * 0.4, r * 0.18, r * 0.12, r * 0.07).fill({ color: 0xf06e50, alpha: 0.45 });
-    f.ellipse(r * 0.6 + ex * 0.4, r * 0.18, r * 0.12, r * 0.07).fill({ color: 0xf06e50, alpha: 0.45 });
-    if (this.mood === 'happy') f.arc(ex * 0.6, r * 0.1 + ey * 0.4, r * 0.22, 0.15 * Math.PI, 0.85 * Math.PI).stroke({ width: 1.8, color: '#5a2c06', cap: 'round' });
-    else f.ellipse(ex * 0.6, r * 0.3 + ey * 0.4, r * 0.11, r * 0.15).fill('#7a2a10');
-  }
+export function makeFamily(kind: FamilyKind): FamilyModel {
+  return kind === 'dog' ? new DogModel() : new PersonModel(kind);
 }

@@ -239,4 +239,4 @@ export const FLOORS: FloorDef[] = [
 ];
 
 /** Where the nugget begins: hopping off the dinner plate, just south of the dining table. */
-export const START = { floor: 0, x: 16.5, y: 6.6, plate: { x: 17, y: 4.2 } };
+export const START = { floor: 0, x: 16.5, y: 6.6, plate: { x: 17, y: 3.5 } };

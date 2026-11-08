@@ -206,3 +206,40 @@ kbd { font-family: var(--font-body); font-weight: 900; font-size: 12px; backgrou
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---------------- 3D stage overlays ---------------- */
+.vignette, .danger { position: absolute; inset: 0; pointer-events: none; }
+.vignette { background: radial-gradient(ellipse at center, rgba(5, 8, 20, 0) 55%, rgba(5, 8, 20, 0.55) 100%); }
+.danger { background: radial-gradient(ellipse at center, rgba(230, 30, 50, 0) 55%, rgba(230, 30, 50, 0.55) 100%); opacity: 0; }
+.fade { position: absolute; inset: 0; background: #000; pointer-events: none; }
+.fade.out { animation: fade-out 0.7s ease forwards; }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* ---------------- Cutscene ---------------- */
+.cutscene { position: absolute; inset: 0; --fade: 0; }
+.letterbox { position: absolute; left: 0; right: 0; background: #05060c; }
+.letterbox.top { top: 0; height: 9vh; animation: bars-in 0.8s ease both; }
+.letterbox.bottom {
+  bottom: 0; min-height: 15vh; animation: bars-in 0.8s ease both;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 10px 16px max(14px, env(safe-area-inset-bottom, 0px));
+}
+@keyframes bars-in { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.cs-caption { max-width: 760px; text-align: center; font-size: clamp(16px, 2.4vw, 22px); font-weight: 800; line-height: 1.35; color: var(--cream); }
+.cs-caption.in { animation: cap-in 0.35s ease both; }
+@keyframes cap-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.cs-who {
+  display: inline-block; margin-right: 8px; padding: 1px 10px; border-radius: 999px;
+  font-family: var(--font-display); font-weight: 400; letter-spacing: 0.03em; background: var(--gold); color: #3a1f05;
+}
+.cs-progress { width: min(320px, 60vw); height: 3px; margin-top: 10px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.cs-progress i { display: block; height: 100%; background: var(--gold); transform-origin: left; transform: scaleX(0); }
+.skip-btn {
+  position: absolute; right: max(14px, env(safe-area-inset-right, 0px)); top: calc(9vh + 12px);
+  display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 999px;
+  background: rgba(16, 20, 38, 0.74); border: 1px solid var(--glass-edge); font-weight: 900; font-size: 15px;
+}
+.skip-btn small { font-size: 11px; opacity: 0.6; font-weight: 800; }
+.skip-btn:hover { background: rgba(40, 46, 80, 0.85); }
+.cs-fade { position: absolute; inset: 0; background: #000; opacity: var(--fade); pointer-events: none; }
+@media (hover: none) { .skip-btn small { display: none; } }
