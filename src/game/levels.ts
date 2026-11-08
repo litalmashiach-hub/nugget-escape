@@ -62,7 +62,7 @@ export const FLOORS: FloorDef[] = [
       f('plant', 12, 8, 1, 1, 'solid'),
       f('plant', 21, 8, 1, 1, 'solid'),
       // Front hall
-      f('rug', 6, 13, 12, 6, 'none', '#2f5d62'),
+      f('rug', 6, 13, 12, 6, 'none', '#3a7d86'),
       f('bookshelf', 1, 10, 3, 1, 'solid'),
       f('console', 8, 10, 4, 1, 'solid'),
       f('piano', 18, 13, 3, 2, 'solid'),

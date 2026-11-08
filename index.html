@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>The Great Nugget Escape</title>
+    <meta name="description" content="A chicken nugget comes to life and must sneak out of the house before the family eats it." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="stage"></div>
+
+      <!-- In-game HUD -->
+      <div id="hud" hidden>
+        <div class="hud-top">
+          <div class="where panel">
+            <div class="where-floor" id="hud-floor">Ground Floor</div>
+            <div class="where-room" id="hud-room">Dining Room</div>
+          </div>
+          <div class="keyring panel" id="hud-keys" aria-label="Keys collected"></div>
+          <div class="hud-right">
+            <div class="lives panel" id="hud-lives" aria-label="Lives"></div>
+            <button class="icon-btn" id="btn-hint" title="Hint (H)" aria-label="Show a hint">?</button>
+            <button class="icon-btn" id="btn-sound" title="Sound (M)" aria-label="Toggle sound"></button>
+            <button class="icon-btn" id="btn-pause" title="Pause (P)" aria-label="Pause">
+              <svg viewBox="0 0 24 24" width="20" height="20"><rect x="6" y="5" width="4" height="14" rx="1.5" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1.5" fill="currentColor"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="toasts" id="toasts" aria-live="polite"></div>
+        <div class="hud-bottom">
+          <div class="objective panel" id="hud-objective"><span class="obj-dot"></span><span class="obj-text">Find the Red key</span></div>
+          <div class="hidden-badge" id="hud-hidden" hidden>Hidden</div>
+        </div>
+        <canvas class="minimap panel" id="minimap" width="200" height="140" aria-hidden="true"></canvas>
+      </div>
+
+      <!-- Touch controls -->
+      <div id="touch" hidden>
+        <div class="stick" id="stick"><div class="stick-knob" id="stick-knob"></div></div>
+        <button class="dash-btn" id="dash-btn" aria-label="Dash">DASH</button>
+      </div>
+
+      <div class="floor-banner" id="floor-banner" hidden></div>
+
+      <!-- Title -->
+      <section class="screen title-screen" id="screen-title">
+        <div class="title-card">
+          <div class="title-hero">
+            <canvas id="hero-nugget" width="280" height="280" aria-hidden="true"></canvas>
+          </div>
+          <div class="title-copy">
+            <p class="eyebrow">Dinner is served…</p>
+            <h1 class="logo"><span>The Great</span> Nugget Escape</h1>
+            <p class="story">Just before the first bite, a chicken nugget blinks awake. Hop off the plate, sneak through three floors of the house and find the colored keys. Every door opens only with the key of its color, and the gold key opens the front door to freedom. If the family spots you, run!</p>
+            <div class="difficulty" role="radiogroup" aria-label="Difficulty">
+              <button role="radio" data-diff="easy" id="diff-easy">Easy<small>5 lives · slow family</small></button>
+              <button role="radio" data-diff="normal" id="diff-normal" class="on" aria-checked="true">Normal<small>3 lives</small></button>
+              <button role="radio" data-diff="hard" id="diff-hard">Hard<small>2 lives · sharp eyes</small></button>
+            </div>
+            <button class="play-btn" id="btn-play">Play</button>
+            <ul class="howto">
+              <li><kbd>WASD</kbd><kbd>↑↓←→</kbd> Move</li>
+              <li><kbd>Space</kbd> Dash</li>
+              <li><b>Hide</b> under beds &amp; tables</li>
+              <li><kbd>H</kbd> Hint · <kbd>P</kbd> Pause</li>
+            </ul>
+            <p class="best" id="best-time"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pause -->
+      <section class="screen dim" id="screen-pause" hidden>
+        <div class="modal">
+          <h2>Paused</h2>
+          <p class="modal-sub" id="pause-hint"></p>
+          <div class="modal-btns">
+            <button class="play-btn" id="btn-resume">Resume</button>
+            <button class="ghost-btn" id="btn-restart">Restart</button>
+            <button class="ghost-btn" id="btn-menu">Main menu</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Win -->
+      <section class="screen dim" id="screen-win" hidden>
+        <div class="modal win">
+          <p class="eyebrow">Freedom!</p>
+          <h2>You escaped!</h2>
+          <div class="stars" id="win-stars"></div>
+          <dl class="stats">
+            <div><dt>Time</dt><dd id="win-time">0:00</dd></div>
+            <div><dt>Spotted</dt><dd id="win-spotted">0</dd></div>
+            <div><dt>Caught</dt><dd id="win-caught">0</dd></div>
+            <div><dt>Best</dt><dd id="win-best">–</dd></div>
+          </dl>
+          <div class="modal-btns">
+            <button class="play-btn" id="btn-again">Play again</button>
+            <button class="ghost-btn" id="btn-win-menu">Main menu</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Game over -->
+      <section class="screen dim" id="screen-over" hidden>
+        <div class="modal over">
+          <p class="eyebrow">Oh no…</p>
+          <h2>Gobbled up!</h2>
+          <p class="modal-sub" id="over-text">The family caught you one time too many.</p>
+          <div class="modal-btns">
+            <button class="play-btn" id="btn-retry">Try again</button>
+            <button class="ghost-btn" id="btn-over-menu">Main menu</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="loading" id="loading">Setting the table…</div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
