@@ -1,5 +1,6 @@
 import { currentObjective, DASH_COOLDOWN, type GameState } from '../game/state';
 import { BOTTLE_SIZE, REFILL_TIME } from '../game/boss';
+import { SECRETS, FEAST_RECHARGE } from '../game/secrets';
 import { KEY_INFO, KEY_ORDER, type KeyColor } from '../game/types';
 import { drawKey, drawNuggetPortrait, makeCanvas } from '../render/paint';
 
@@ -24,6 +25,7 @@ export class Hud {
   private lastRoom = '';
   private lastObjective = '';
   private livesShown = -1;
+  private secretsShown = -1;
   private nuggetURL = nuggetIconURL();
   private mini = $<HTMLCanvasElement>('minimap');
   private miniCtx = this.mini.getContext('2d')!;
@@ -39,6 +41,7 @@ export class Hud {
       ring.appendChild(el);
       this.slots.set(color, el);
     }
+    (document.querySelector('.feast-icon') as HTMLElement).style.backgroundImage = `url(${nuggetIconURL(48)})`;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     this.mini.width = 200 * dpr;
     this.mini.height = 140 * dpr;
@@ -49,6 +52,7 @@ export class Hud {
     this.lastRoom = '';
     this.lastObjective = '';
     this.livesShown = -1;
+    this.secretsShown = -1;
     for (const el of this.slots.values()) el.className = 'key-slot';
     $('toasts').innerHTML = '';
   }
@@ -59,7 +63,7 @@ export class Hud {
     setTimeout(() => el.classList.remove('pop'), 350);
   }
 
-  toast(html: string, kind: '' | 'danger' = '', ms = 2200) {
+  toast(html: string, kind: '' | 'danger' | 'secret' = '', ms = 2200) {
     const box = $('toasts');
     const el = document.createElement('div');
     el.className = `toast ${kind}`;
@@ -108,6 +112,20 @@ export class Hud {
       }
       box.setAttribute('aria-label', `${state.lives} lives left`);
       this.livesShown = state.lives;
+    }
+    const feastBtn = $('feast-btn');
+    const allFound = state.secrets.size === SECRETS.length;
+    if (feastBtn.hidden === allFound) feastBtn.hidden = !allFound;
+    if (allFound) {
+      const cooling = state.feastCd > 0;
+      feastBtn.classList.toggle('cooling', cooling);
+      ($('feast-charge') as HTMLElement).style.transform = `scaleX(${cooling ? state.feastCd / FEAST_RECHARGE : 0})`;
+    }
+    if (state.secrets.size !== this.secretsShown) {
+      this.secretsShown = state.secrets.size;
+      const el = $('hud-secrets');
+      el.hidden = this.secretsShown === 0;
+      el.innerHTML = SECRETS.filter((s) => state.secrets.has(s.id)).map((s) => `<span class="em">${s.emoji}</span>`).join('') + ` ${this.secretsShown}/${SECRETS.length}`;
     }
     const obj = currentObjective(state);
     const key = obj ? obj.text + obj.color : '';

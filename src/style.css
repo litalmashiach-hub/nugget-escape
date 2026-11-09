@@ -295,3 +295,33 @@ body.boss .boss-hud { top: max(12px, env(safe-area-inset-top, 0px)); }
   body.boss .toasts { top: 210px; }
 }
 body.touch.boss .objective { display: none; }
+
+.where-secrets { margin-top: 4px; font-size: 13px; font-weight: 800; color: #ffe08a; letter-spacing: 0.04em; }
+.where-secrets .em { font-size: 15px; margin-right: 2px; }
+.stats { flex-wrap: wrap; }
+.toast.secret { background: linear-gradient(90deg, rgba(120, 70, 160, 0.92), rgba(40, 110, 150, 0.92)); border-color: rgba(255, 230, 140, 0.55); }
+.toast .em { font-size: 18px; margin-right: 4px; vertical-align: -2px; }
+
+/* ---------------- Nugget rain (all easter eggs found) ---------------- */
+.feast-btn {
+  position: absolute; right: max(14px, env(safe-area-inset-right, 0px)); top: calc(max(12px, env(safe-area-inset-top, 0px)) + 58px);
+  pointer-events: auto; display: flex; align-items: center; gap: 8px; padding: 8px 14px 8px 8px; overflow: hidden;
+  border-radius: 999px; border: 2px solid #ffe08a; color: #4a2306; font-family: var(--font-display); font-size: 16px;
+  background: linear-gradient(180deg, #ffd66b, #f5a524); box-shadow: 0 4px 16px rgba(245, 165, 36, .5);
+  animation: feastPulse 1.6s ease-in-out infinite; touch-action: manipulation;
+}
+.feast-icon { width: 30px; height: 30px; border-radius: 50%; background: #fff3c4 center / 26px no-repeat; }
+.feast-key { font-size: 11px; font-family: inherit; background: rgba(74,35,6,.15); border-radius: 6px; padding: 1px 6px; }
+body.touch .feast-key { display: none; }
+.feast-charge { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: #4a2306; transform-origin: left; transform: scaleX(0); opacity: .5; }
+.feast-btn.cooling { animation: none; filter: grayscale(.7) brightness(.85); }
+@keyframes feastPulse { 50% { transform: scale(1.06); box-shadow: 0 4px 26px rgba(255, 214, 107, .9); } }
+@media (max-width: 760px) {
+  .feast-btn { top: auto; bottom: max(250px, calc(env(safe-area-inset-bottom, 0px) + 240px)); left: max(14px, env(safe-area-inset-left, 0px)); right: auto; font-size: 14px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .feast-btn { top: auto; bottom: max(140px, calc(env(safe-area-inset-bottom, 0px) + 136px)); left: max(14px, env(safe-area-inset-left, 0px)); right: auto; font-size: 13px; padding: 5px 10px 5px 5px; }
+  .feast-icon { width: 24px; height: 24px; background-size: 20px; }
+}
+body.boss .feast-btn { display: none; }
+@media (prefers-reduced-motion: reduce) { .feast-btn { animation: none; } }

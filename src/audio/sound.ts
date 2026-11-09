@@ -83,6 +83,26 @@ export class Sound {
     [784, 988, 1175, 1568].forEach((f, i) => this.tone(f, 0.25, { type: 'triangle', vol: 0.25, at: t + i * 0.07 }));
     [1568, 2093].forEach((f, i) => this.tone(f, 0.4, { type: 'sine', vol: 0.12, at: t + 0.3 + i * 0.08 }));
   }
+  /** Nugget rain: a fanfare, then nuggets pattering down. */
+  feast() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.28, { type: 'square', vol: 0.09, at: t + i * 0.09 }));
+    for (let i = 0; i < 18; i++) this.noise(0.04, 0.12, 900 + Math.random() * 900, t + 0.5 + i * 0.09 + Math.random() * 0.05);
+  }
+  chomp() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.noise(0.06, 0.18, 1800, t);
+    this.noise(0.05, 0.14, 1500, t + 0.14);
+  }
+  /** A sparkly "you found a secret" jingle. */
+  secret() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    [1047, 1319, 1568, 2093, 1568, 2093, 2637].forEach((f, i) => this.tone(f, 0.22, { type: 'sine', vol: 0.18, at: t + i * 0.06 }));
+    [523, 659, 784].forEach((f, i) => this.tone(f, 0.6, { type: 'triangle', vol: 0.1, at: t + 0.1 + i * 0.02 }));
+  }
   unlock_() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;

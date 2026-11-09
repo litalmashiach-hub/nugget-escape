@@ -1,3 +1,4 @@
+import { SECRETS, touchingSecret, closestPoint, FEAST_TIME, FEAST_RECHARGE, type SecretId } from './secrets';
 import { FLOORS, START } from './levels';
 import { buildMaps, type FloorMap } from './map';
 import { findPath } from './path';
@@ -29,6 +30,10 @@ export interface Input {
 
 export type GameEvent =
   | { type: 'key'; color: KeyColor; x: number; y: number }
+  | { type: 'secret'; id: SecretId; x: number; y: number }
+  | { type: 'feast' }
+  | { type: 'feastEnd' }
+  | { type: 'chomp'; id: string; floor: number; x: number; y: number }
   | { type: 'unlock'; color: KeyColor; x: number; y: number }
   | { type: 'locked'; color: KeyColor }
   | { type: 'alert'; id: string }
@@ -49,7 +54,7 @@ export type GameEvent =
   | { type: 'hurt' }
   | { type: 'refill' };
 
-export type ChaserMode = 'patrol' | 'alert' | 'chase' | 'search' | 'return';
+export type ChaserMode = 'patrol' | 'alert' | 'chase' | 'search' | 'return' | 'feast';
 
 export interface Chaser {
   def: FamilyDef;
@@ -68,6 +73,15 @@ export interface Chaser {
   seesPlayer: boolean;
   moving: boolean;
   walkPhase: number;
+}
+
+/** A chicken nugget that rained from the ceiling. `drop` counts down to when it lands. */
+export interface Food {
+  floor: number;
+  x: number;
+  y: number;
+  drop: number;
+  eaten: boolean;
 }
 
 export interface Player {
@@ -119,6 +133,12 @@ export interface GameState {
   statusTimer: number;
   time: number;
   timesSpotted: number;
+  /** Easter eggs found so far. */
+  secrets: Set<SecretId>;
+  /** Nugget rain: seconds left, seconds until it can be used again, and the nuggets on the floors. */
+  feastTime: number;
+  feastCd: number;
+  food: Food[];
   timesCaught: number;
   checkpoint: { floor: number; x: number; y: number };
   events: GameEvent[];
@@ -184,6 +204,10 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
     statusTimer: opts.skipIntro ? 0 : INTRO_TIME,
     time: 0,
     timesSpotted: 0,
+    secrets: new Set(),
+    feastTime: 0,
+    feastCd: 0,
+    food: [],
     timesCaught: 0,
     checkpoint: { floor: START.floor, x: START.x, y: START.y },
     events: [],
@@ -349,9 +373,98 @@ export function update(state: GameState, input: Input, dt: number) {
 
   state.time += dt;
   state.lockedCd = Math.max(0, state.lockedCd - dt);
+  updateFeast(state, dt);
   updatePlayer(state, input, dt);
   if (state.status !== 'playing') return;
   for (const c of state.chasers) updateChaser(state, c, dt);
+}
+
+/** True once every easter egg is found and the nugget rain is charged. */
+export function canFeast(state: GameState) {
+  return state.secrets.size === SECRETS.length && state.feastCd <= 0 && state.feastTime <= 0
+    && (state.status === 'playing' || state.status === 'caught');
+}
+
+/**
+ * Chicken nuggets rain from the ceiling on every floor. The whole family stops
+ * chasing and goes to eat them for FEAST_TIME seconds.
+ */
+export function startFeast(state: GameState, rand: () => number = Math.random) {
+  if (!canFeast(state)) return false;
+  state.feastTime = FEAST_TIME;
+  state.feastCd = FEAST_RECHARGE;
+  state.food = [];
+  const drop = (floor: number, cx: number, cy: number, n: number, spread: number) => {
+    const map = state.maps[floor];
+    for (let i = 0, tries = 0; i < n && tries < n * 30; tries++) {
+      const x = cx + (rand() * 2 - 1) * spread, y = cy + (rand() * 2 - 1) * spread;
+      if (!map.walkableForFamily(Math.floor(x), Math.floor(y), state.unlocked) || map.isStairs(Math.floor(x), Math.floor(y))) continue;
+      state.food.push({ floor, x, y, drop: 0.2 + rand() * 1.6, eaten: false });
+      i++;
+    }
+  };
+  for (const c of state.chasers) drop(c.floor, c.pos.x, c.pos.y, 4, 2.5);
+  const p = state.player;
+  drop(p.floor, p.pos.x, p.pos.y, 10, 4.5);
+  for (const m of state.maps) drop(m.def.id, m.w / 2, m.h / 2, 8, Math.max(m.w, m.h) / 2);
+  for (const c of state.chasers) {
+    if (c.mode === 'chase' || c.mode === 'alert') state.events.push({ type: 'lost', id: c.def.id });
+    c.mode = 'feast';
+    c.path = [];
+    c.timer = 0.6; // look up in surprise first
+    c.seesPlayer = false;
+  }
+  state.events.push({ type: 'feast' });
+  return true;
+}
+
+function updateFeast(state: GameState, dt: number) {
+  state.feastCd = Math.max(0, state.feastCd - dt);
+  for (const f of state.food) f.drop = Math.max(0, f.drop - dt);
+  if (state.feastTime <= 0) return;
+  state.feastTime -= dt;
+  if (state.feastTime <= 0) {
+    state.feastTime = 0;
+    state.food = state.food.filter((f) => !f.eaten);
+    for (const c of state.chasers) {
+      if (c.mode !== 'feast') continue;
+      c.mode = 'search';
+      c.timer = 1.2;
+      c.lookBase = c.facing;
+      c.path = [];
+    }
+    state.events.push({ type: 'feastEnd' });
+  }
+}
+
+function updateFeaster(state: GameState, c: Chaser, dt: number) {
+  c.seesPlayer = false;
+  c.moving = false;
+  if (c.timer > 0) {
+    c.timer -= dt; // chewing (or looking up at the rain)
+    return;
+  }
+  const near = state.food
+    .filter((f) => !f.eaten && f.drop <= 0 && f.floor === c.floor)
+    .sort((a, b) => Math.hypot(a.x - c.pos.x, a.y - c.pos.y) - Math.hypot(b.x - c.pos.x, b.y - c.pos.y));
+  const food = near[0];
+  if (!food) return;
+  const d = Math.hypot(food.x - c.pos.x, food.y - c.pos.y);
+  if (d < 0.75) {
+    food.eaten = true;
+    c.timer = 1.3;
+    c.path = [];
+    c.facing = Math.atan2(food.y - c.pos.y, food.x - c.pos.x);
+    state.events.push({ type: 'chomp', id: c.def.id, floor: c.floor, x: food.x, y: food.y });
+    return;
+  }
+  c.pathTimer -= dt;
+  if (!c.path.length || c.pathTimer <= 0) {
+    c.path = pathTo(state, c, food) ?? [];
+    c.pathTimer = 0.5;
+    if (!c.path.length) { food.eaten = true; return; } // out of reach: someone else's problem
+  }
+  followPath(state, c, c.def.chaseSpeed * 0.75, dt);
 }
 
 function respawn(state: GameState) {
@@ -361,6 +474,7 @@ function respawn(state: GameState) {
   p.invuln = INVULN_TIME;
   p.dashTime = 0;
   for (const c of state.chasers) if (c.floor === p.floor) Object.assign(c, makeChaser(c.def, c.floor));
+  if (state.feastTime > 0) for (const c of state.chasers) { c.mode = 'feast'; c.path = []; c.timer = 0; }
   state.status = 'playing';
   state.caughtBy = null;
   state.events.push({ type: 'respawn' });
@@ -406,6 +520,14 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
         state.events.push({ type: 'locked', color: door.color });
       }
     }
+  }
+
+  // Easter eggs
+  for (const sd of SECRETS) {
+    if (state.secrets.has(sd.id) || !touchingSecret(sd, p.floor, p.pos, PLAYER_RADIUS)) continue;
+    state.secrets.add(sd.id);
+    const c = closestPoint(sd, p.pos);
+    state.events.push({ type: 'secret', id: sd.id, x: c.x, y: c.y });
   }
 
   // Keys
@@ -511,6 +633,7 @@ function followPath(state: GameState, c: Chaser, speed: number, dt: number) {
 }
 
 function updateChaser(state: GameState, c: Chaser, dt: number) {
+  if (c.mode === 'feast') return updateFeaster(state, c, dt);
   const p = state.player;
   const s = state.settings;
   const sameFloor = p.floor === c.floor;

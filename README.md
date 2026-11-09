@@ -20,6 +20,7 @@ The game works on iPhone and Android in portrait or landscape, with a joystick a
 | Dash | Space or Shift | DASH button |
 | Squirt ketchup (boss fight) | F, J, K or Enter, or hold the mouse button | SQUIRT button |
 | Hint | H | **?** button |
+| Nugget rain (after all 5 easter eggs) | N | NUGGET RAIN button |
 | Pause | P or Esc | Pause button |
 | Sound on/off | M | Speaker button |
 
@@ -27,13 +28,14 @@ The game works on iPhone and Android in portrait or landscape, with a joystick a
 - Keys lead from room to room across all three floors. The last key is **gold** and opens the front door.
 - If a family member sees you (their view cone turns red) they run at you. Break their line of sight, take the stairs, or **hide under beds and tables**.
 - Easy (5 lives), Normal (3) and Hard (2, sharper eyes).
+- Five **easter eggs** are hidden around the house. Walk up to the right furniture and a surprise pops out (spoiler: an egg in the kitchen fridge, a book on the living room bookshelf, a rubber duck in the bathtub, a box in the attic storage room, and Grandma's dentures in the corner of her bedroom). Find all five and a **NUGGET RAIN** button appears (or press N): chicken nuggets fall from the ceiling and the whole family stops chasing you to eat them for 14 seconds. It recharges after 40 seconds.
 
 ### The house
 
 | Floor | Rooms | Who lives there |
 | --- | --- | --- |
 | Ground Floor | Dining Room (start), Kitchen, Living Room, Front Hall | Dad, Mom, Biscuit the dog |
-| Upstairs | Kids' Bedroom, Bathroom, Parents' Bedroom, Upstairs Hall | Big Sister, Grandma |
+| Upstairs | Kids' Bedroom, Bathroom, Grandma's Bedroom, Upstairs Hall | Big Sister, Grandma |
 | Attic | Storage Room, Attic Playroom | Little Brother |
 
 Key chain: Red → Teal → Orange → Green → Purple → Blue → Pink → Gold (front door).

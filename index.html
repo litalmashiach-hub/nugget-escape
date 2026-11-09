@@ -44,6 +44,7 @@
           <div class="where panel">
             <div class="where-floor" id="hud-floor">Ground Floor</div>
             <div class="where-room" id="hud-room">Dining Room</div>
+            <div class="where-secrets" id="hud-secrets" title="Easter eggs found" hidden></div>
           </div>
           <div class="keyring panel" id="hud-keys" aria-label="Keys collected"></div>
           <div class="hud-right">
@@ -58,6 +59,10 @@
             </button>
           </div>
         </div>
+        <button class="feast-btn" id="feast-btn" hidden title="Make chicken nuggets rain from the ceiling (N)">
+          <span class="feast-icon" aria-hidden="true"></span><span class="feast-label">NUGGET RAIN</span><span class="feast-key">N</span>
+          <i class="feast-charge" id="feast-charge"></i>
+        </button>
         <div class="boss-hud panel" id="boss-hud" hidden>
           <div class="boss-row"><span class="boss-name">Uncle Gus</span><div class="boss-bar"><i id="boss-hp"></i></div></div>
           <div class="boss-row ketchup-row"><span class="ketchup-label">Ketchup</span><div class="ketchup-bar"><i id="ketchup-fill"></i></div><span class="ketchup-keys"><kbd>F</kbd> or click</span></div>
@@ -133,6 +138,7 @@
             <div><dt>Time</dt><dd id="win-time">0:00</dd></div>
             <div><dt>Spotted</dt><dd id="win-spotted">0</dd></div>
             <div><dt>Caught</dt><dd id="win-caught">0</dd></div>
+            <div><dt>Secrets</dt><dd id="win-secrets">0/3</dd></div>
             <div><dt>Best</dt><dd id="win-best">–</dd></div>
           </dl>
           <div class="modal-btns">

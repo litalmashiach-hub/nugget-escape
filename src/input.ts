@@ -10,6 +10,7 @@ export class Controls {
   onPause: () => void = () => {};
   onMute: () => void = () => {};
   onHint: () => void = () => {};
+  onFeast: () => void = () => {};
   onAnyKey: () => void = () => {};
 
   constructor() {
@@ -22,6 +23,7 @@ export class Controls {
       else if (k === 'KeyP' || k === 'Escape') this.onPause();
       else if (k === 'KeyM') this.onMute();
       else if (k === 'KeyH') this.onHint();
+      else if (k === 'KeyN') this.onFeast();
       this.keys.add(k);
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));

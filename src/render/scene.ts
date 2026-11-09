@@ -5,6 +5,7 @@
  */
 import { THREE, cutUniforms, canvasTexture, glowTexture, GEO } from './kit';
 import { buildFloor, type FloorView } from './world';
+import { SecretFx, FoodFx, SECRET_COLORS } from './secrets';
 import { NuggetModel, PersonModel, BossModel, drumstick, makeFamily, type FamilyModel } from './characters';
 import { Cutscene, BossCutscene, CAM_OFFSET } from './cutscene';
 import { bakeBubble, drawSymbol, makeCanvas } from './paint';
@@ -145,6 +146,8 @@ export class Scene {
   readonly camera = new THREE.PerspectiveCamera(40, 1, 0.1, 120);
   readonly cutscene = new Cutscene();
   readonly bossCut = new BossCutscene();
+  private secretFx = new SecretFx();
+  private foodFx = new FoodFx();
   private gus = new BossModel();
   private ketchupBlobs: THREE.Mesh[] = [];
   private flyingSticks: THREE.Group[] = [];
@@ -205,7 +208,7 @@ export class Scene {
     }
 
     for (const k of ['!', '?', 'yum'] as const) this.bubbleTex[k] = canvasTexture(bakeBubble(k));
-    this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.gus.root);
+    this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.gus.root, this.secretFx.group, this.foodFx.group);
     this.gus.root.visible = false;
     const blobMat = new THREE.MeshStandardMaterial({ color: '#e0201c', roughness: 0.25, emissive: '#7a0a08', emissiveIntensity: 0.5 });
     for (let i = 0; i < 24; i++) {
@@ -272,6 +275,7 @@ export class Scene {
     this.wonTime = 0;
     this.gus.fallen = 0;
     this.bossCut.reset();
+    this.secretFx.reset();
   }
 
   snapCamera() {
@@ -348,6 +352,17 @@ export class Scene {
   handle(state: GameState, e: GameEvent) {
     const p = state.player.pos;
     switch (e.type) {
+      case 'secret': {
+        const cols = SECRET_COLORS[e.id];
+        // pop out just in front of the furniture, toward the nugget, so it is not hidden inside it
+        const x = e.x + (p.x - e.x) * 0.7, z = e.y + (p.y - e.y) * 0.7;
+        for (let i = 0; i < 2; i++) this.burst(x, 1, z, cols[i % cols.length], 9);
+        this.secretFx.start(e.id, x, z);
+        break;
+      }
+      case 'chomp':
+        if (e.floor === state.player.floor) for (let i = 0; i < 10; i++) this.particles.emit(e.x, 0.15, e.y, { vx: (Math.random() - 0.5) * 2, vy: 1 + Math.random() * 1.5, vz: (Math.random() - 0.5) * 2, grav: 7, life: 0.6, size: 0.05, color: '#e0a03c' });
+        break;
       case 'key':
         this.burst(e.x, 0.6, e.y, KEY_INFO[e.color].hex, 30);
         break;
@@ -458,6 +473,12 @@ export class Scene {
     if (story) this.renderStory(dt, view);
     else if (bossIntro) this.renderBossIntro(state, dt);
     else this.renderGame(state, dt, fv);
+    this.foodFx.group.visible = !story && !bossIntro;
+    if (!story && !bossIntro) {
+      this.foodFx.update(state, this.time);
+      this.secretFx.group.visible = true;
+      this.secretFx.update(state, dt, this.time, (x, y, z, color) => this.particles.emit(x, y, z, { vy: 0.4, life: 0.9, size: 0.045, color }));
+    } else this.secretFx.group.visible = false;
     if (!story) this.renderBossFight(state, dt, bossIntro);
 
     this.particles.update(dt);
@@ -606,9 +627,13 @@ export class Scene {
       cv.model.root.position.set(c.pos.x, 0, c.pos.y);
       if (cv.model instanceof PersonModel) cv.model.animate(c.facing, c.moving, c.walkPhase, dt);
       else cv.model.animate(c.facing, c.moving, c.walkPhase, dt, this.time);
-      if (!(cv.model instanceof PersonModel)) cv.model.excited = c.mode === 'chase' || c.mode === 'alert' ? 1 : 0;
-      this.updateCone(state, c, cv);
-      const kind = c.mode === 'alert' || (c.mode === 'chase' && c.seesPlayer) ? '!' : c.mode === 'search' || c.mode === 'chase' ? '?' : '';
+      const feasting = c.mode === 'feast';
+      const chewing = feasting && c.timer > 0 && !c.moving;
+      if (!(cv.model instanceof PersonModel)) cv.model.excited = c.mode === 'chase' || c.mode === 'alert' || feasting ? 1 : 0;
+      else cv.model.mouthOpen = chewing ? Math.abs(Math.sin(this.time * 12)) : 0;
+      cv.cone.visible = !feasting;
+      if (!feasting) this.updateCone(state, c, cv);
+      const kind = chewing ? 'yum' : c.mode === 'alert' || (c.mode === 'chase' && c.seesPlayer) ? '!' : c.mode === 'search' || c.mode === 'chase' ? '?' : '';
       const showKind = state.status === 'caught' && state.caughtBy === c.def.name ? 'yum' : kind;
       if (showKind) {
         if (showKind !== cv.bubbleKind) { cv.pop = 0; cv.bubble.material.map = this.bubbleTex[showKind]; }

@@ -134,7 +134,7 @@ export const FLOORS: FloorDef[] = [
     rooms: [
       { id: 'kids', name: "Kids' Bedroom", seed: [4, 4], style: 'carpetBlue', wall: '#a7d8f0', door: 'teal' },
       { id: 'bath', name: 'Bathroom', seed: [14, 5], style: 'bathTile', wall: '#cfeee6', door: 'green' },
-      { id: 'parents', name: "Parents' Bedroom", seed: [24, 5], style: 'carpetRose', wall: '#e6c3d0', door: 'pink' },
+      { id: 'parents', name: "Grandma's Bedroom", seed: [24, 5], style: 'carpetRose', wall: '#e6c3d0', door: 'pink' },
       { id: 'hall1', name: 'Upstairs Hall', seed: [15, 11], style: 'wood', wall: '#d9cbb0' },
     ],
     furniture: [
@@ -151,7 +151,7 @@ export const FLOORS: FloorDef[] = [
       f('towelCabinet', 18, 2, 1, 2, 'solid'),
       f('bathMat', 11, 3, 3, 1, 'none'),
       f('laundry', 18, 6, 1, 1, 'solid'),
-      // Parents room
+      // Grandma's room (Grandma patrols here)
       f('rug', 23, 5, 7, 2, 'none', '#8e6c88'),
       f('bigBed', 26, 1, 3, 4, 'hide', '#e6c3d0'),
       f('nightstand', 25, 1, 1, 1, 'solid'),

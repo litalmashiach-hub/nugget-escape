@@ -1,7 +1,8 @@
 import './style.css';
-import { createGame, currentObjective, update, type GameEvent, type GameOptions, type GameState } from './game/state';
+import { createGame, currentObjective, update, startFeast, type GameEvent, type GameOptions, type GameState } from './game/state';
 import { botInput } from './game/bot';
 import { beginBossFight, makeBoss, ENTRY } from './game/boss';
+import { SECRETS } from './game/secrets';
 import { KEY_INFO, type Difficulty } from './game/types';
 import { Scene } from './render/scene';
 import { CUTSCENE_LENGTH, BOSS_INTRO_LENGTH } from './render/cutscene';
@@ -293,6 +294,12 @@ async function boot() {
   controls.onPause = togglePause;
   controls.onMute = toggleMute;
   controls.onHint = hint;
+  const feast = () => {
+    if (mode !== 'game') return;
+    if (startFeast(state)) for (const e of state.events.splice(0)) onEvent(e);
+  };
+  controls.onFeast = feast;
+  $('feast-btn').addEventListener('click', () => { sound.unlock(); feast(); });
   controls.onAnyKey = () => sound.unlock();
   controls.bindTouch($('stick'), $('stick-knob'), $('dash-btn'));
   controls.bindFire($('fire-btn'));
@@ -314,6 +321,26 @@ async function boot() {
   function onEvent(e: GameEvent) {
     scene.handle(state, e);
     switch (e.type) {
+      case 'secret': {
+        const sd = SECRETS.find((s) => s.id === e.id)!;
+        sound.secret();
+        const n = state.secrets.size;
+        hud.toast(n === SECRETS.length
+          ? `<span class="em">${sd.emoji}</span> You found ${sd.name} ${sd.where}! That's every easter egg! Press <b>NUGGET RAIN</b>!`
+          : `<span class="em">${sd.emoji}</span> Easter egg! You found ${sd.name} ${sd.where}. (${n}/${SECRETS.length})`, 'secret', 3200);
+        break;
+      }
+      case 'feast':
+        sound.feast();
+        hud.banner('Nugget rain!');
+        hud.toast('Chicken nuggets are falling from the ceiling! The family stopped chasing you to eat them.', 'secret', 3600);
+        break;
+      case 'feastEnd':
+        hud.toast('Snack time is over. Careful, they are hungry for more!', 'danger', 2600);
+        break;
+      case 'chomp':
+        if (e.floor === state.player.floor) sound.chomp();
+        break;
       case 'key': {
         const info = KEY_INFO[e.color];
         sound.key();
@@ -408,6 +435,7 @@ async function boot() {
           $('win-time').textContent = fmtTime(state.time);
           $('win-spotted').textContent = String(state.timesSpotted);
           $('win-caught').textContent = String(state.timesCaught);
+          $('win-secrets').textContent = `${state.secrets.size}/${SECRETS.length}`;
           $('win-best').textContent = isBest ? 'New!' : fmtTime(best!);
           $('touch').hidden = true;
           show('screen-win');

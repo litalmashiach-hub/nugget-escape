@@ -154,6 +154,39 @@ test('out the front door, Uncle Gus drops in; skipping starts the ketchup boss f
   expect(errors).toEqual([]);
 });
 
+test('walking up to the kitchen fridge finds the egg easter egg', async ({ page }) => {
+  const errors = await open(page, '?autostart&nofamily');
+  await page.evaluate(() => {
+    const s = (window as any).__nugget.state;
+    s.unlocked.add('red');
+    s.player.pos = { x: 10.5, y: 4.4 };
+  });
+  await page.keyboard.down('ArrowUp');
+  await expect(page.locator('.toast.secret')).toContainText('egg', { timeout: 10_000 });
+  await page.keyboard.up('ArrowUp');
+  await expect(page.locator('#hud-secrets')).toBeVisible();
+  await expect(page.locator('#hud-secrets')).toContainText('1/5');
+  expect(errors).toEqual([]);
+});
+
+test('finding every easter egg unlocks the NUGGET RAIN button, and the family stops to eat', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' }); // the button pulses otherwise
+  const errors = await open(page, '?autostart');
+  await page.waitForFunction(() => (window as any).__nugget.state.status === 'playing', undefined, { timeout: 15_000 });
+  await expect(page.locator('#feast-btn')).toBeHidden();
+  await page.evaluate(() => {
+    const s = (window as any).__nugget.state;
+    for (const id of ['egg', 'book', 'duck', 'box', 'dentures']) s.secrets.add(id);
+  });
+  await expect(page.locator('#feast-btn')).toBeVisible();
+  await page.locator('#feast-btn').click();
+  await page.waitForFunction(() => (window as any).__nugget.state.feastTime > 0);
+  await expect(page.locator('#floor-banner')).toHaveText('Nugget rain!');
+  await expect(page.locator('#feast-btn')).toHaveClass(/cooling/);
+  expect(await page.evaluate(() => (window as any).__nugget.state.chasers.every((c: any) => c.mode === 'feast'))).toBe(true);
+  expect(errors).toEqual([]);
+});
+
 test('the robot player escapes the whole house and sees the win screen', async ({ page }) => {
   test.setTimeout(240_000);
   const errors = await open(page, '?autostart&nofamily&bot&speed=12');
