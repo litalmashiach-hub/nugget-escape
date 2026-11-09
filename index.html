@@ -94,20 +94,24 @@
             <canvas id="hero-nugget" width="280" height="280" aria-hidden="true"></canvas>
           </div>
           <div class="title-copy">
-            <p class="eyebrow">Dinner is served…</p>
+            <p class="eyebrow" id="title-eyebrow">Dinner is served…</p>
             <h1 class="logo"><span>The Great</span> Nugget Escape</h1>
-            <p class="story">Just before the first bite, a chicken nugget blinks awake. Hop off the plate, sneak through three floors of the house and find the colored keys. Every door opens only with the key of its color, and the gold key opens the front door to freedom. If the family spots you, run!</p>
+            <p class="story" id="title-story">Just before the first bite, a chicken nugget blinks awake. Hop off the plate, sneak through three floors of the house and find the colored keys. Every door opens only with the key of its color, and the gold key opens the front door to freedom. If the family spots you, run!</p>
             <div class="difficulty" role="radiogroup" aria-label="Difficulty">
               <button role="radio" data-diff="easy" id="diff-easy">Easy<small>5 lives · slow family</small></button>
               <button role="radio" data-diff="normal" id="diff-normal" class="on" aria-checked="true">Normal<small>3 lives</small></button>
               <button role="radio" data-diff="hard" id="diff-hard">Hard<small>2 lives · sharp eyes</small></button>
+            </div>
+            <div class="levels" role="radiogroup" aria-label="Level">
+              <button role="radio" data-level="1" id="level-1" class="on" aria-checked="true"><span class="lv-num">Level 1</span>The House</button>
+              <button role="radio" data-level="2" id="level-2" disabled><span class="lv-num">Level 2</span>The Grocery Store<small class="lv-lock">🔒 Beat Level 1 to unlock</small></button>
             </div>
             <button class="play-btn" id="btn-play">Play</button>
             <ul class="howto">
               <li><kbd>WASD</kbd><kbd>↑↓←→</kbd> Move</li>
               <li><kbd>Space</kbd> Dash</li>
               <li><kbd>F</kbd> Squirt ketchup (boss)</li>
-              <li><b>Hide</b> under beds &amp; tables</li>
+              <li><b>Hide</b> under beds, tables &amp; carts</li>
               <li><kbd>H</kbd> Hint · <kbd>P</kbd> Pause</li>
             </ul>
             <p class="best" id="best-time"></p>
@@ -131,20 +135,23 @@
       <!-- Win -->
       <section class="screen dim" id="screen-win" hidden>
         <div class="modal win">
-          <p class="eyebrow">Freedom!</p>
-          <h2>You escaped!</h2>
+          <p class="eyebrow" id="win-eyebrow">Freedom!</p>
+          <h2 id="win-title">You escaped!</h2>
+          <p class="modal-sub" id="win-sub" hidden></p>
           <div class="stars" id="win-stars"></div>
           <dl class="stats">
             <div><dt>Time</dt><dd id="win-time">0:00</dd></div>
             <div><dt>Spotted</dt><dd id="win-spotted">0</dd></div>
             <div><dt>Caught</dt><dd id="win-caught">0</dd></div>
-            <div><dt>Secrets</dt><dd id="win-secrets">0/3</dd></div>
+            <div id="win-secrets-box"><dt>Secrets</dt><dd id="win-secrets">0/5</dd></div>
             <div><dt>Best</dt><dd id="win-best">–</dd></div>
           </dl>
           <div class="modal-btns">
+            <button class="play-btn" id="btn-next" hidden>Play Level 2</button>
             <button class="play-btn" id="btn-again">Play again</button>
             <button class="ghost-btn" id="btn-win-menu">Main menu</button>
           </div>
+          <p class="next-note" id="win-next-note" hidden></p>
         </div>
       </section>
 

@@ -1,5 +1,5 @@
 import { findPath } from './path';
-import { currentObjective, findDoor, type GameState, type Input } from './state';
+import { currentObjective, findDoor, goalRoom, type GameState, type Input } from './state';
 import { KEY_ORDER, type KeyColor } from './types';
 import { bossBotInput } from './boss';
 import { buildMaps } from './map';
@@ -16,7 +16,10 @@ export function botInput(state: GameState): Input {
   if (!obj || obj.action === 'boss' || state.status !== 'playing') return { mx: 0, my: 0, dash: false };
 
   let goalFloor: number, gx: number, gy: number;
-  if (obj.action === 'find') {
+  const goal = goalRoom(state);
+  if (obj.action === 'escape' && goal) {
+    goalFloor = goal.floor; gx = goal.room.seed[0]; gy = goal.room.seed[1];
+  } else if (obj.action === 'find') {
     const k = state.keys.find((k) => k.color === obj.color)!;
     goalFloor = k.floor; gx = Math.floor(k.x); gy = Math.floor(k.y);
   } else {
@@ -49,7 +52,7 @@ export function botInput(state: GameState): Input {
   if (path.length > 1 && Math.hypot(node.x - p.pos.x, node.y - p.pos.y) < 0.15) node = path[1];
   // When opening the front door, keep walking south through it.
   let tx = node.x, ty = node.y;
-  if (obj.action === 'escape' && path.length <= 1) ty += 1;
+  if (obj.action === 'escape' && !goal && path.length <= 1) ty += 1;
   if (obj.action === 'open' && path.length <= 1 && goalFloor === p.floor && !state.unlocked.has(obj.color)) {
     tx = gx + 0.5; ty = gy + 0.5;
   }
