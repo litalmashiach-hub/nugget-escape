@@ -1,5 +1,5 @@
 import { currentObjective, DASH_COOLDOWN, type GameState } from '../game/state';
-import { BOTTLE_SIZE, BOTTLE_EVERY } from '../game/boss';
+import { BOTTLE_SIZE } from '../game/boss';
 import { SECRETS, FEAST_RECHARGE } from '../game/secrets';
 import { KEY_INFO, KEY_ORDER, type KeyColor } from '../game/types';
 import { drawKey, drawNuggetPortrait, makeCanvas } from '../render/paint';
@@ -146,9 +146,13 @@ export class Hud {
       const b = state.boss;
       $('boss-hp').style.transform = `scaleX(${Math.max(0, b.hp) / b.maxHp})`;
       const empty = state.ketchup <= 0;
-      const fill = empty ? Math.min(1, state.refill / BOTTLE_EVERY) : state.ketchup / BOTTLE_SIZE;
-      $('ketchup-fill').style.transform = `scaleX(${fill})`;
+      // An empty bottle stays empty until the nugget grabs a new one: the meter never creeps back up.
+      $('ketchup-fill').style.transform = `scaleX(${state.ketchup / BOTTLE_SIZE})`;
       $('ketchup-fill').parentElement!.classList.toggle('empty', empty);
+      const label = empty ? (state.bottles.length ? 'Grab a bottle!' : 'Empty!') : 'Ketchup';
+      const lab = document.querySelector<HTMLElement>('.ketchup-label')!;
+      if (lab.textContent !== label) lab.textContent = label;
+      lab.classList.toggle('empty', empty);
       document.getElementById('fire-btn')?.classList.toggle('cooling', empty);
     }
     this.drawMinimap(state);

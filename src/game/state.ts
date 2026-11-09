@@ -413,7 +413,7 @@ export function canFeast(state: GameState) {
  * Chicken nuggets rain from the ceiling on every floor. The whole family stops
  * chasing and goes to eat them for FEAST_TIME seconds.
  */
-export function startFeast(state: GameState, rand: () => number = Math.random) {
+export function startFeast(state: GameState, rand: () => number = state.rand) {
   if (!canFeast(state)) return false;
   state.feastTime = FEAST_TIME;
   state.feastCd = FEAST_RECHARGE;

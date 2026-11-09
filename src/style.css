@@ -325,3 +325,4 @@ body.touch .feast-key { display: none; }
 }
 body.boss .feast-btn { display: none; }
 @media (prefers-reduced-motion: reduce) { .feast-btn { animation: none; } }
+.ketchup-label.empty { color: #ffd84a; animation: feastPulse 0.8s ease-in-out infinite; }

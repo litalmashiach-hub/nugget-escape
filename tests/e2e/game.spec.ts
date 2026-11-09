@@ -151,6 +151,12 @@ test('out the front door, Uncle Gus drops in; skipping starts the ketchup boss f
   await page.mouse.down();
   await page.waitForFunction(() => (window as any).__nugget.state.boss.hp < (window as any).__nugget.state.boss.maxHp, undefined, { timeout: 20_000 });
   await page.mouse.up();
+  // An empty bottle stays empty: the meter does not fill back up on its own.
+  await page.evaluate(() => { const n = (window as any).__nugget; n.state.ketchup = 0; n.state.player.invuln = 99; });
+  await expect(page.locator('.ketchup-label')).toHaveText(/Empty|Grab a bottle/);
+  await page.waitForTimeout(2500);
+  expect(await page.evaluate(() => (window as any).__nugget.state.ketchup)).toBe(0);
+  expect(await page.locator('#ketchup-fill').evaluate((el) => el.style.transform)).toBe('scaleX(0)');
   expect(errors).toEqual([]);
 });
 
