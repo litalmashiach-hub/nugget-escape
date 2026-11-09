@@ -1,4 +1,6 @@
 import { currentObjective, DASH_COOLDOWN, type GameState } from '../game/state';
+import { BOTTLE_SIZE } from '../game/boss';
+import { SECRETS, FEAST_RECHARGE } from '../game/secrets';
 import { KEY_INFO, KEY_ORDER, type KeyColor } from '../game/types';
 import { drawKey, drawNuggetPortrait, makeCanvas } from '../render/paint';
 
@@ -23,6 +25,7 @@ export class Hud {
   private lastRoom = '';
   private lastObjective = '';
   private livesShown = -1;
+  private secretsShown = -1;
   private nuggetURL = nuggetIconURL();
   private mini = $<HTMLCanvasElement>('minimap');
   private miniCtx = this.mini.getContext('2d')!;
@@ -38,6 +41,7 @@ export class Hud {
       ring.appendChild(el);
       this.slots.set(color, el);
     }
+    (document.querySelector('.feast-icon') as HTMLElement).style.backgroundImage = `url(${nuggetIconURL(48)})`;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     this.mini.width = 200 * dpr;
     this.mini.height = 140 * dpr;
@@ -48,6 +52,7 @@ export class Hud {
     this.lastRoom = '';
     this.lastObjective = '';
     this.livesShown = -1;
+    this.secretsShown = -1;
     for (const el of this.slots.values()) el.className = 'key-slot';
     $('toasts').innerHTML = '';
   }
@@ -58,7 +63,7 @@ export class Hud {
     setTimeout(() => el.classList.remove('pop'), 350);
   }
 
-  toast(html: string, kind: '' | 'danger' = '', ms = 2200) {
+  toast(html: string, kind: '' | 'danger' | 'secret' = '', ms = 2200) {
     const box = $('toasts');
     const el = document.createElement('div');
     el.className = `toast ${kind}`;
@@ -84,7 +89,7 @@ export class Hud {
       this.lastFloor = p.floor;
       $('hud-floor').textContent = map.def.name;
     }
-    const room = map.roomAt(p.pos.x, p.pos.y)?.name ?? this.lastRoom;
+    const room = state.boss ? 'Front Garden' : map.roomAt(p.pos.x, p.pos.y)?.name ?? this.lastRoom;
     if (room !== this.lastRoom) {
       this.lastRoom = room;
       $('hud-room').textContent = room;
@@ -108,13 +113,28 @@ export class Hud {
       box.setAttribute('aria-label', `${state.lives} lives left`);
       this.livesShown = state.lives;
     }
+    const feastBtn = $('feast-btn');
+    const allFound = state.secrets.size === SECRETS.length;
+    if (feastBtn.hidden === allFound) feastBtn.hidden = !allFound;
+    if (allFound) {
+      const cooling = state.feastCd > 0;
+      feastBtn.classList.toggle('cooling', cooling);
+      ($('feast-charge') as HTMLElement).style.transform = `scaleX(${cooling ? state.feastCd / FEAST_RECHARGE : 0})`;
+    }
+    if (state.secrets.size !== this.secretsShown) {
+      this.secretsShown = state.secrets.size;
+      const el = $('hud-secrets');
+      el.hidden = this.secretsShown === 0;
+      el.innerHTML = SECRETS.filter((s) => state.secrets.has(s.id)).map((s) => `<span class="em">${s.emoji}</span>`).join('') + ` ${this.secretsShown}/${SECRETS.length}`;
+    }
     const obj = currentObjective(state);
     const key = obj ? obj.text + obj.color : '';
     if (key !== this.lastObjective) {
       this.lastObjective = key;
       const el = $('hud-objective');
       if (obj) {
-        (el.querySelector('.obj-dot') as HTMLElement).style.cssText = `background:${KEY_INFO[obj.color].hex};box-shadow:0 0 12px ${KEY_INFO[obj.color].hex}`;
+        const hex = obj.action === 'boss' ? '#e0201c' : KEY_INFO[obj.color].hex;
+        (el.querySelector('.obj-dot') as HTMLElement).style.cssText = `background:${hex};box-shadow:0 0 12px ${hex}`;
         (el.querySelector('.obj-text') as HTMLElement).textContent = obj.text;
       }
     }
@@ -122,6 +142,19 @@ export class Hud {
     const dash = document.getElementById('dash-btn');
     if (dash) dash.classList.toggle('cooling', p.dashCd > 0.05);
     void DASH_COOLDOWN;
+    if (state.boss) {
+      const b = state.boss;
+      $('boss-hp').style.transform = `scaleX(${Math.max(0, b.hp) / b.maxHp})`;
+      const empty = state.ketchup <= 0;
+      // An empty bottle stays empty until the nugget grabs a new one: the meter never creeps back up.
+      $('ketchup-fill').style.transform = `scaleX(${state.ketchup / BOTTLE_SIZE})`;
+      $('ketchup-fill').parentElement!.classList.toggle('empty', empty);
+      const label = empty ? (state.bottles.length ? 'Grab a bottle!' : 'Empty!') : 'Ketchup';
+      const lab = document.querySelector<HTMLElement>('.ketchup-label')!;
+      if (lab.textContent !== label) lab.textContent = label;
+      lab.classList.toggle('empty', empty);
+      document.getElementById('fire-btn')?.classList.toggle('cooling', empty);
+    }
     this.drawMinimap(state);
   }
 

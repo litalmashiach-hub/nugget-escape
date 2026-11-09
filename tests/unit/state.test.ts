@@ -4,7 +4,9 @@ import {
   CAUGHT_TIME, INTRO_TIME, type GameState, type Input,
 } from '../../src/game/state';
 import { botInput } from '../../src/game/bot';
+import { beginBossFight } from '../../src/game/boss';
 import type { KeyColor } from '../../src/game/types';
+import { START } from '../../src/game/levels';
 
 const DT = 1 / 60;
 const idle: Input = { mx: 0, my: 0, dash: false };
@@ -16,7 +18,7 @@ function skipIntro(s: GameState) {
 
 function run(s: GameState, seconds: number, input: (s: GameState) => Input) {
   const events: string[] = [];
-  for (let t = 0; t < seconds && s.status !== 'won' && s.status !== 'gameover'; t += DT) {
+  for (let t = 0; t < seconds && s.status !== 'won' && s.status !== 'gameover' && s.status !== 'bossIntro'; t += DT) {
     update(s, input(s), DT);
     events.push(...s.events.map((e) => e.type));
   }
@@ -30,6 +32,14 @@ describe('starting a game', () => {
     expect(s.lives).toBe(3);
     expect(s.held.size).toBe(0);
     skipIntro(s);
+  });
+
+  it('after the opening cutscene the game starts at once, with the nugget off the plate', () => {
+    const s = createGame('normal', { skipIntro: true });
+    expect(s.status).toBe('playing');
+    expect(s.player.pos).toEqual({ x: START.x, y: START.y });
+    update(s, { mx: -1, my: 0, dash: false }, DT);
+    expect(s.player.pos.x).toBeLessThan(START.x);
   });
 
   it('difficulty changes lives', () => {
@@ -121,6 +131,26 @@ describe('stairs', () => {
     expect(ev).toContain('floor');
     expect(s.player.floor).toBe(1);
     expect(s.checkpoint.floor).toBe(1);
+  });
+});
+
+describe('arriving on a new floor', () => {
+  it('the nugget turns around to face away from the stairs and does not walk straight back onto them', () => {
+    const s = createGame('normal', { noFamily: true });
+    skipIntro(s);
+    s.unlocked.add('red');
+    s.player.pos = { x: 3.5, y: 14.5 };
+    run(s, 1, () => ({ mx: -1, my: 0, dash: false })); // walk west up the stairs
+    expect(s.player.floor).toBe(1);
+    // the stairs down are to the west, so the nugget now looks east into the hall
+    expect(Math.cos(s.player.facing)).toBeGreaterThan(0.7);
+    const x0 = s.player.pos.x;
+    run(s, 1, () => ({ mx: -1, my: 0, dash: false })); // still holding west
+    expect(s.player.floor).toBe(1);
+    expect(s.player.pos.x).toBeCloseTo(x0, 5);
+    run(s, 0.5, () => ({ mx: 1, my: 0, dash: false })); // walk on into the hall
+    expect(s.player.pos.x).toBeGreaterThan(x0 + 0.5);
+    expect(s.player.floor).toBe(1);
   });
 });
 
@@ -218,6 +248,26 @@ describe('family members', () => {
     expect(Math.hypot(dad.pos.x - start.x, dad.pos.y - start.y)).toBeGreaterThan(2);
   });
 
+  it('wander unpredictably: different games take different routes', () => {
+    const route = (seed: number) => {
+      const s = createGame('normal', { seed });
+      skipIntro(s);
+      s.player.floor = 2; s.player.pos = { x: 5.5, y: 3.5 }; // out of the way, locked in storage
+      const dad = s.chasers.find((c) => c.def.id === 'dad')!;
+      const cells: string[] = [];
+      for (let i = 0; i < 60 * 30; i++) {
+        update(s, idle, DT);
+        if (i % 60 === 0) cells.push(`${Math.floor(dad.pos.x)},${Math.floor(dad.pos.y)}`);
+      }
+      return cells;
+    };
+    expect(route(1)).toEqual(route(1)); // same seed, same walk
+    expect(route(1)).not.toEqual(route(2));
+    expect(route(2)).not.toEqual(route(3));
+    // and they do not just loop the same few tiles
+    expect(new Set(route(4)).size).toBeGreaterThan(8);
+  });
+
   it('never walk into walls while patrolling for a long time', () => {
     const s = createGame('hard');
     skipIntro(s);
@@ -246,10 +296,14 @@ describe('family members', () => {
 });
 
 describe('full escape', () => {
-  it('the autopilot collects every key across all floors and escapes through the front door', () => {
-    const s = createGame('normal', { noFamily: true });
+  it('the autopilot collects every key across all floors, gets out the front door and beats the boss', () => {
+    const s = createGame('normal', { noFamily: true, seed: 1 });
     skipIntro(s);
-    const ev = run(s, 240, botInput);
+    let ev = run(s, 240, botInput);
+    expect(s.status).toBe('bossIntro');
+    beginBossFight(s);
+    ev = ev.concat(run(s, 120, botInput));
+    expect(ev).toContain('bossDown');
     expect(s.status).toBe('won');
     expect(ev.filter((e) => e === 'key')).toHaveLength(8);
     expect(ev.filter((e) => e === 'unlock')).toHaveLength(8);

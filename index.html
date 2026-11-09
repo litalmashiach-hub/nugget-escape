@@ -2,7 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#0e1324" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Nugget Escape" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <title>The Great Nugget Escape</title>
     <meta name="description" content="A chicken nugget comes to life and must sneak out of the house before the family eats it." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -12,6 +20,23 @@
   <body>
     <div id="app">
       <div id="stage"></div>
+      <div class="vignette" aria-hidden="true"></div>
+      <div class="danger" id="danger" aria-hidden="true"></div>
+
+      <!-- Opening cutscene -->
+      <section class="cutscene" id="cutscene" hidden aria-label="Opening cutscene">
+        <div class="letterbox top"></div>
+        <div class="letterbox bottom">
+          <div class="cs-caption" id="cutscene-caption" hidden>
+            <span class="cs-who" id="cutscene-who"></span>
+            <span class="cs-text" id="cutscene-text"></span>
+          </div>
+          <div class="cs-progress"><i id="cutscene-progress"></i></div>
+        </div>
+        <button class="skip-btn" id="btn-skip">Skip <span aria-hidden="true">▸▸</span><small>Space</small></button>
+        <div class="cs-fade"></div>
+      </section>
+      <div class="fade" id="fade" hidden></div>
 
       <!-- In-game HUD -->
       <div id="hud" hidden>
@@ -19,16 +44,28 @@
           <div class="where panel">
             <div class="where-floor" id="hud-floor">Ground Floor</div>
             <div class="where-room" id="hud-room">Dining Room</div>
+            <div class="where-secrets" id="hud-secrets" title="Easter eggs found" hidden></div>
           </div>
           <div class="keyring panel" id="hud-keys" aria-label="Keys collected"></div>
           <div class="hud-right">
             <div class="lives panel" id="hud-lives" aria-label="Lives"></div>
+            <button class="icon-btn" id="btn-full" title="Full screen" aria-label="Full screen" hidden>
+              <svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
             <button class="icon-btn" id="btn-hint" title="Hint (H)" aria-label="Show a hint">?</button>
             <button class="icon-btn" id="btn-sound" title="Sound (M)" aria-label="Toggle sound"></button>
             <button class="icon-btn" id="btn-pause" title="Pause (P)" aria-label="Pause">
               <svg viewBox="0 0 24 24" width="20" height="20"><rect x="6" y="5" width="4" height="14" rx="1.5" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1.5" fill="currentColor"/></svg>
             </button>
           </div>
+        </div>
+        <button class="feast-btn" id="feast-btn" hidden title="Make chicken nuggets rain from the ceiling (N)">
+          <span class="feast-icon" aria-hidden="true"></span><span class="feast-label">NUGGET RAIN</span><span class="feast-key">N</span>
+          <i class="feast-charge" id="feast-charge"></i>
+        </button>
+        <div class="boss-hud panel" id="boss-hud" hidden>
+          <div class="boss-row"><span class="boss-name">Uncle Gus</span><div class="boss-bar"><i id="boss-hp"></i></div></div>
+          <div class="boss-row ketchup-row"><span class="ketchup-label">Ketchup</span><div class="ketchup-bar"><i id="ketchup-fill"></i></div><span class="ketchup-keys"><kbd>F</kbd> or click</span></div>
         </div>
         <div class="toasts" id="toasts" aria-live="polite"></div>
         <div class="hud-bottom">
@@ -42,6 +79,10 @@
       <div id="touch" hidden>
         <div class="stick" id="stick"><div class="stick-knob" id="stick-knob"></div></div>
         <button class="dash-btn" id="dash-btn" aria-label="Dash">DASH</button>
+        <button class="fire-btn" id="fire-btn" aria-label="Squirt ketchup" hidden>
+          <svg viewBox="0 0 40 40" width="34" height="34" aria-hidden="true"><rect x="13" y="12" width="14" height="24" rx="5" fill="#fff"/><rect x="16" y="6" width="8" height="7" rx="2" fill="#fff"/><rect x="18.5" y="1" width="3" height="6" rx="1" fill="#fff"/></svg>
+          <span>SQUIRT</span>
+        </button>
       </div>
 
       <div class="floor-banner" id="floor-banner" hidden></div>
@@ -65,6 +106,7 @@
             <ul class="howto">
               <li><kbd>WASD</kbd><kbd>↑↓←→</kbd> Move</li>
               <li><kbd>Space</kbd> Dash</li>
+              <li><kbd>F</kbd> Squirt ketchup (boss)</li>
               <li><b>Hide</b> under beds &amp; tables</li>
               <li><kbd>H</kbd> Hint · <kbd>P</kbd> Pause</li>
             </ul>
@@ -96,6 +138,7 @@
             <div><dt>Time</dt><dd id="win-time">0:00</dd></div>
             <div><dt>Spotted</dt><dd id="win-spotted">0</dd></div>
             <div><dt>Caught</dt><dd id="win-caught">0</dd></div>
+            <div><dt>Secrets</dt><dd id="win-secrets">0/3</dd></div>
             <div><dt>Best</dt><dd id="win-best">–</dd></div>
           </dl>
           <div class="modal-btns">

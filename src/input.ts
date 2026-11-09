@@ -5,9 +5,12 @@ export class Controls {
   private keys = new Set<string>();
   private dashQueued = false;
   private stick = { x: 0, y: 0, id: -1 };
+  private fireTouch = false;
+  private fireMouse = false;
   onPause: () => void = () => {};
   onMute: () => void = () => {};
   onHint: () => void = () => {};
+  onFeast: () => void = () => {};
   onAnyKey: () => void = () => {};
 
   constructor() {
@@ -15,15 +18,31 @@ export class Controls {
       if (e.repeat && (e.code === 'Space' || e.code === 'ShiftLeft')) return;
       this.onAnyKey();
       const k = e.code;
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(k)) e.preventDefault();
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter'].includes(k)) e.preventDefault();
       if (k === 'Space' || k === 'ShiftLeft' || k === 'ShiftRight') this.dashQueued = true;
       else if (k === 'KeyP' || k === 'Escape') this.onPause();
       else if (k === 'KeyM') this.onMute();
       else if (k === 'KeyH') this.onHint();
+      else if (k === 'KeyN') this.onFeast();
       this.keys.add(k);
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => { this.keys.clear(); this.fireMouse = false; this.fireTouch = false; });
+  }
+
+  /** Holding the mouse button on the game squirts ketchup too. */
+  bindMouse(stage: HTMLElement) {
+    stage.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button === 0) this.fireMouse = true; });
+    window.addEventListener('pointerup', (e) => { if (e.pointerType === 'mouse') this.fireMouse = false; });
+  }
+
+  bindFire(btn: HTMLElement) {
+    const on = (e: PointerEvent) => { e.preventDefault(); this.fireTouch = true; try { btn.setPointerCapture?.(e.pointerId); } catch { /* synthetic or finished pointer */ } };
+    const off = () => { this.fireTouch = false; };
+    btn.addEventListener('pointerdown', on);
+    btn.addEventListener('pointerup', off);
+    btn.addEventListener('pointercancel', off);
+    btn.addEventListener('lostpointercapture', off);
   }
 
   bindTouch(stick: HTMLElement, knob: HTMLElement, dash: HTMLElement) {
@@ -64,11 +83,14 @@ export class Controls {
     if (!mx && !my) { mx = this.stick.x; my = this.stick.y; }
     const dash = this.dashQueued;
     this.dashQueued = false;
-    return { mx, my, dash };
+    const fire = this.fireTouch || this.fireMouse || ['KeyF', 'KeyJ', 'KeyK', 'Enter', 'NumpadEnter'].some((k) => this.keys.has(k));
+    return { mx, my, dash, fire };
   }
 
   clear() {
     this.keys.clear();
     this.dashQueued = false;
+    this.fireMouse = false;
+    this.fireTouch = false;
   }
 }

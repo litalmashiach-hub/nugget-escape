@@ -206,3 +206,123 @@ kbd { font-family: var(--font-body); font-weight: 900; font-size: 12px; backgrou
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---------------- 3D stage overlays ---------------- */
+.vignette, .danger { position: absolute; inset: 0; pointer-events: none; }
+.vignette { background: radial-gradient(ellipse at center, rgba(5, 8, 20, 0) 55%, rgba(5, 8, 20, 0.55) 100%); }
+.danger { background: radial-gradient(ellipse at center, rgba(230, 30, 50, 0) 55%, rgba(230, 30, 50, 0.55) 100%); opacity: 0; }
+.fade { position: absolute; inset: 0; background: #000; pointer-events: none; }
+.fade.out { animation: fade-out 0.7s ease forwards; }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* ---------------- Cutscene ---------------- */
+.cutscene { position: absolute; inset: 0; --fade: 0; }
+.letterbox { position: absolute; left: 0; right: 0; background: #05060c; }
+.letterbox.top { top: 0; height: 9vh; animation: bars-in 0.8s ease both; }
+.letterbox.bottom {
+  bottom: 0; min-height: 15vh; animation: bars-in 0.8s ease both;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 10px 16px max(14px, env(safe-area-inset-bottom, 0px));
+}
+@keyframes bars-in { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.cs-caption { max-width: 760px; text-align: center; font-size: clamp(16px, 2.4vw, 22px); font-weight: 800; line-height: 1.35; color: var(--cream); }
+.cs-caption.in { animation: cap-in 0.35s ease both; }
+@keyframes cap-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.cs-who {
+  display: inline-block; margin-right: 8px; padding: 1px 10px; border-radius: 999px;
+  font-family: var(--font-display); font-weight: 400; letter-spacing: 0.03em; background: var(--gold); color: #3a1f05;
+}
+.cs-progress { width: min(320px, 60vw); height: 3px; margin-top: 10px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.cs-progress i { display: block; height: 100%; background: var(--gold); transform-origin: left; transform: scaleX(0); }
+.skip-btn {
+  position: absolute; right: max(14px, env(safe-area-inset-right, 0px)); top: calc(9vh + 12px);
+  display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 999px;
+  background: rgba(16, 20, 38, 0.74); border: 1px solid var(--glass-edge); font-weight: 900; font-size: 15px;
+}
+.skip-btn small { font-size: 11px; opacity: 0.6; font-weight: 800; }
+.skip-btn:hover { background: rgba(40, 46, 80, 0.85); }
+.cs-fade { position: absolute; inset: 0; background: #000; opacity: var(--fade); pointer-events: none; }
+@media (hover: none) { .skip-btn small { display: none; } }
+
+/* ---------------- Boss fight ---------------- */
+.boss-hud {
+  position: absolute; left: 50%; transform: translateX(-50%); top: calc(max(12px, env(safe-area-inset-top, 0px)) + 62px);
+  width: min(460px, calc(100vw - 32px)); padding: 8px 14px; display: grid; gap: 6px;
+}
+.boss-row { display: flex; align-items: center; gap: 10px; }
+.boss-name { font-family: var(--font-display); font-size: 18px; color: #ffb3a8; white-space: nowrap; }
+.boss-bar, .ketchup-bar { flex: 1; height: 14px; border-radius: 8px; background: rgba(255,255,255,.1); overflow: hidden; border: 1px solid rgba(255,255,255,.15); }
+.boss-bar i, .ketchup-bar i { display: block; height: 100%; transform-origin: left; transition: transform .15s; }
+.boss-bar i { background: linear-gradient(90deg, #ff4d4d, #ff9b4d); }
+.ketchup-bar { height: 9px; }
+.ketchup-bar i { background: #e0201c; }
+.ketchup-bar.empty i { background: #ffd84a; }
+.ketchup-label { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; color: var(--cream-dim); }
+.ketchup-keys { font-size: 11px; color: var(--cream-dim); white-space: nowrap; }
+body.touch .ketchup-keys { display: none; }
+.fire-btn {
+  position: absolute; right: max(20px, env(safe-area-inset-right, 0px)); bottom: max(36px, env(safe-area-inset-bottom, 0px));
+  width: 108px; height: 108px; border-radius: 50%; pointer-events: auto; border: 3px solid rgba(255,255,255,.4);
+  background: radial-gradient(circle at 35% 30%, #ff6b5c, #c3140f); color: #fff; font-family: var(--font-display); font-size: 16px;
+  display: grid; place-items: center; align-content: center; gap: 0; box-shadow: 0 6px 18px rgba(0,0,0,.45);
+  touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+.fire-btn:active { transform: scale(0.94); }
+body.boss .dash-btn { width: 72px; height: 72px; font-size: 15px; bottom: max(156px, calc(env(safe-area-inset-bottom, 0px) + 150px)); right: max(40px, calc(env(safe-area-inset-right, 0px) + 20px)); }
+
+/* ---------------- Phones ---------------- */
+button, .stick { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.stick, .dash-btn { touch-action: none; }
+@media (max-height: 500px) and (orientation: landscape) {
+  .stick { width: 110px; height: 110px; bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
+  .dash-btn { width: 76px; height: 76px; bottom: max(20px, env(safe-area-inset-bottom, 0px)); }
+  .fire-btn { width: 92px; height: 92px; bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
+  body.boss .dash-btn { bottom: max(118px, calc(env(safe-area-inset-bottom, 0px) + 112px)); width: 62px; height: 62px; }
+  body.touch .hud-bottom { bottom: max(14px, env(safe-area-inset-bottom, 0px)); }
+  .boss-hud { top: calc(max(8px, env(safe-area-inset-top, 0px)) + 52px); padding: 5px 12px; }
+  .letterbox.top { height: 6vh; }
+  .letterbox.bottom { min-height: 18vh; }
+  .cs-caption { font-size: 15px; }
+}
+.fire-btn.cooling { opacity: 0.55; filter: saturate(.5); }
+body.boss .keyring, body.boss .minimap { display: none; }
+body.boss .boss-hud { top: max(12px, env(safe-area-inset-top, 0px)); }
+@media (max-width: 760px) {
+  body.boss .boss-hud { top: calc(max(12px, env(safe-area-inset-top, 0px)) + 62px); }
+}
+@media (max-width: 600px) {
+  body.boss .boss-hud { top: calc(max(12px, env(safe-area-inset-top, 0px)) + 104px); }
+  body.boss .toasts { top: 210px; }
+}
+body.touch.boss .objective { display: none; }
+
+.where-secrets { margin-top: 4px; font-size: 13px; font-weight: 800; color: #ffe08a; letter-spacing: 0.04em; }
+.where-secrets .em { font-size: 15px; margin-right: 2px; }
+.stats { flex-wrap: wrap; }
+.toast.secret { background: linear-gradient(90deg, rgba(120, 70, 160, 0.92), rgba(40, 110, 150, 0.92)); border-color: rgba(255, 230, 140, 0.55); }
+.toast .em { font-size: 18px; margin-right: 4px; vertical-align: -2px; }
+
+/* ---------------- Nugget rain (all easter eggs found) ---------------- */
+.feast-btn {
+  position: absolute; right: max(14px, env(safe-area-inset-right, 0px)); top: calc(max(12px, env(safe-area-inset-top, 0px)) + 58px);
+  pointer-events: auto; display: flex; align-items: center; gap: 8px; padding: 8px 14px 8px 8px; overflow: hidden;
+  border-radius: 999px; border: 2px solid #ffe08a; color: #4a2306; font-family: var(--font-display); font-size: 16px;
+  background: linear-gradient(180deg, #ffd66b, #f5a524); box-shadow: 0 4px 16px rgba(245, 165, 36, .5);
+  animation: feastPulse 1.6s ease-in-out infinite; touch-action: manipulation;
+}
+.feast-icon { width: 30px; height: 30px; border-radius: 50%; background: #fff3c4 center / 26px no-repeat; }
+.feast-key { font-size: 11px; font-family: inherit; background: rgba(74,35,6,.15); border-radius: 6px; padding: 1px 6px; }
+body.touch .feast-key { display: none; }
+.feast-charge { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: #4a2306; transform-origin: left; transform: scaleX(0); opacity: .5; }
+.feast-btn.cooling { animation: none; filter: grayscale(.7) brightness(.85); }
+@keyframes feastPulse { 50% { transform: scale(1.06); box-shadow: 0 4px 26px rgba(255, 214, 107, .9); } }
+@media (max-width: 760px) {
+  .feast-btn { top: auto; bottom: max(250px, calc(env(safe-area-inset-bottom, 0px) + 240px)); left: max(14px, env(safe-area-inset-left, 0px)); right: auto; font-size: 14px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .feast-btn { top: auto; bottom: max(140px, calc(env(safe-area-inset-bottom, 0px) + 136px)); left: max(14px, env(safe-area-inset-left, 0px)); right: auto; font-size: 13px; padding: 5px 10px 5px 5px; }
+  .feast-icon { width: 24px; height: 24px; background-size: 20px; }
+}
+body.boss .feast-btn { display: none; }
+@media (prefers-reduced-motion: reduce) { .feast-btn { animation: none; } }
+.ketchup-label.empty { color: #ffd84a; animation: feastPulse 0.8s ease-in-out infinite; }

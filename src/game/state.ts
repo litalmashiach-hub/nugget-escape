@@ -1,7 +1,9 @@
+import { SECRETS, touchingSecret, closestPoint, FEAST_TIME, FEAST_RECHARGE, type SecretId } from './secrets';
 import { FLOORS, START } from './levels';
 import { buildMaps, type FloorMap } from './map';
 import { findPath } from './path';
 import { canSee, angleDiff } from './vision';
+import { makeBoss, updateBossFight, ENTRY, BOSS_NAME, type Boss, type Shot, type Bottle } from './boss';
 import {
   DIFFICULTY, KEY_INFO, KEY_ORDER,
   type Difficulty, type DifficultySettings, type FamilyDef, type FloorDef, type KeyColor, type Vec,
@@ -22,10 +24,16 @@ export interface Input {
   my: number;
   /** True only on the frame dash was pressed. */
   dash: boolean;
+  /** Held down to squirt ketchup (boss fight only). */
+  fire?: boolean;
 }
 
 export type GameEvent =
   | { type: 'key'; color: KeyColor; x: number; y: number }
+  | { type: 'secret'; id: SecretId; x: number; y: number }
+  | { type: 'feast' }
+  | { type: 'feastEnd' }
+  | { type: 'chomp'; id: string; floor: number; x: number; y: number }
   | { type: 'unlock'; color: KeyColor; x: number; y: number }
   | { type: 'locked'; color: KeyColor }
   | { type: 'alert'; id: string }
@@ -35,9 +43,19 @@ export type GameEvent =
   | { type: 'dash' }
   | { type: 'respawn' }
   | { type: 'win' }
-  | { type: 'gameover' };
+  | { type: 'gameover' }
+  | { type: 'bossIntro' }
+  | { type: 'bossStart' }
+  | { type: 'squirt' }
+  | { type: 'bossHit'; x: number; y: number; hp: number }
+  | { type: 'bossDown' }
+  | { type: 'throw' }
+  | { type: 'slam'; x: number; y: number }
+  | { type: 'hurt' }
+  | { type: 'refill' }
+  | { type: 'bottle'; x: number; y: number };
 
-export type ChaserMode = 'patrol' | 'alert' | 'chase' | 'search' | 'return';
+export type ChaserMode = 'patrol' | 'alert' | 'chase' | 'search' | 'return' | 'feast';
 
 export interface Chaser {
   def: FamilyDef;
@@ -56,6 +74,17 @@ export interface Chaser {
   seesPlayer: boolean;
   moving: boolean;
   walkPhase: number;
+  /** Speed factor for the current patrol walk: people amble faster or slower each time. */
+  stride: number;
+}
+
+/** A chicken nugget that rained from the ceiling. `drop` counts down to when it lands. */
+export interface Food {
+  floor: number;
+  x: number;
+  y: number;
+  drop: number;
+  eaten: boolean;
 }
 
 export interface Player {
@@ -68,6 +97,7 @@ export interface Player {
   dashCd: number;
   invuln: number;
   walkPhase: number;
+  fireCd: number;
   /** Stairs ignore the nugget right after arriving until the player lets go or turns. */
   stairsArmed: boolean;
   arriveDir: Vec;
@@ -81,15 +111,35 @@ export interface KeyItem {
   taken: boolean;
 }
 
-export type Status = 'intro' | 'playing' | 'caught' | 'won' | 'gameover';
+export type Status = 'intro' | 'playing' | 'caught' | 'bossIntro' | 'boss' | 'won' | 'gameover';
 
 export interface GameOptions {
   noFamily?: boolean;
+  /** Escaping through the front door wins at once (no boss fight). */
+  noBoss?: boolean;
+  /** Start playing at once (the opening cutscene already showed the nugget hopping off the plate). */
+  skipIntro?: boolean;
   floors?: FloorDef[];
+  /** Fixes the family's random wandering (for tests and replays). */
+  seed?: number;
+}
+
+/** Small seeded random number generator (mulberry32). */
+export function makeRandom(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 export interface GameState {
   maps: FloorMap[];
+  /** Random numbers for the family's wandering. */
+  rand: () => number;
   difficulty: Difficulty;
   settings: DifficultySettings;
   player: Player;
@@ -102,11 +152,27 @@ export interface GameState {
   statusTimer: number;
   time: number;
   timesSpotted: number;
+  /** Easter eggs found so far. */
+  secrets: Set<SecretId>;
+  /** Nugget rain: seconds left, seconds until it can be used again, and the nuggets on the floors. */
+  feastTime: number;
+  feastCd: number;
+  food: Food[];
   timesCaught: number;
   checkpoint: { floor: number; x: number; y: number };
   events: GameEvent[];
   lockedCd: number;
   caughtBy: string | null;
+  noBoss: boolean;
+  /** Uncle Gus, once the nugget is out of the front door. */
+  boss: Boss | null;
+  /** Flying ketchup and drumsticks during the boss fight. */
+  shots: Shot[];
+  /** Squirts left in the ketchup bottle, and seconds since the last bottle appeared while empty. */
+  ketchup: number;
+  refill: number;
+  /** Full ketchup bottles lying in the garden while the nugget's bottle is empty. */
+  bottles: Bottle[];
 }
 
 const makeChaser = (def: FamilyDef, floor: number): Chaser => ({
@@ -126,6 +192,7 @@ const makeChaser = (def: FamilyDef, floor: number): Chaser => ({
   seesPlayer: false,
   moving: false,
   walkPhase: 0,
+  stride: 1,
 });
 
 export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions = {}): GameState {
@@ -146,23 +213,35 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
       dashCd: 0,
       invuln: 0,
       walkPhase: 0,
+      fireCd: 0,
       stairsArmed: true,
       arriveDir: { x: 0, y: 0 },
     },
+    rand: makeRandom(opts.seed ?? Math.floor(Math.random() * 2 ** 31)),
     chasers: opts.noFamily ? [] : floors.flatMap((fl) => fl.family.map((d) => makeChaser(d, fl.id))),
     keys: floors.flatMap((fl) => fl.keys.map((k) => ({ ...k, x: k.x + 0.5, y: k.y + 0.5, floor: fl.id, taken: false }))),
     held: new Set(),
     unlocked: new Set(),
     lives: settings.lives,
-    status: 'intro',
-    statusTimer: INTRO_TIME,
+    status: opts.skipIntro ? 'playing' : 'intro',
+    statusTimer: opts.skipIntro ? 0 : INTRO_TIME,
     time: 0,
     timesSpotted: 0,
+    secrets: new Set(),
+    feastTime: 0,
+    feastCd: 0,
+    food: [],
     timesCaught: 0,
     checkpoint: { floor: START.floor, x: START.x, y: START.y },
     events: [],
     lockedCd: 0,
     caughtBy: null,
+    noBoss: !!opts.noBoss,
+    boss: null,
+    shots: [],
+    ketchup: 0,
+    refill: 0,
+    bottles: [],
   };
 }
 
@@ -253,7 +332,7 @@ export function findDoor(state: GameState, color: KeyColor) {
 
 export interface Objective {
   color: KeyColor;
-  action: 'find' | 'open' | 'escape';
+  action: 'find' | 'open' | 'escape' | 'boss';
   text: string;
   hint: string;
 }
@@ -261,7 +340,10 @@ export interface Objective {
 export function currentObjective(state: GameState): Objective | null {
   for (const color of KEY_ORDER) {
     if (state.unlocked.has(color)) {
-      if (color === 'gold') return { color, action: 'escape', text: 'Run out the front door!', hint: 'The front door is open. Run outside to freedom!' };
+      if (color === 'gold') {
+        if (state.boss) return { color, action: 'boss', text: `Squirt ketchup at ${BOSS_NAME}!`, hint: `Face ${BOSS_NAME} and squirt: the ketchup goes the way you are facing. Dodge the drumsticks, stay out of the red ring, and when the bottle is empty grab the new one that appears.` };
+        return { color, action: 'escape', text: 'Run out the front door!', hint: 'The front door is open. Run outside to freedom!' };
+      }
       continue;
     }
     const label = KEY_INFO[color].label;
@@ -290,7 +372,11 @@ export function currentObjective(state: GameState): Objective | null {
 
 export function update(state: GameState, input: Input, dt: number) {
   state.events = [];
-  if (state.status === 'won' || state.status === 'gameover') return;
+  if (state.status === 'won' || state.status === 'gameover' || state.status === 'bossIntro') return;
+  if (state.status === 'boss') {
+    updateBossFight(state, input, dt);
+    return;
+  }
 
   if (state.status === 'intro') {
     state.statusTimer -= dt;
@@ -311,9 +397,98 @@ export function update(state: GameState, input: Input, dt: number) {
 
   state.time += dt;
   state.lockedCd = Math.max(0, state.lockedCd - dt);
+  updateFeast(state, dt);
   updatePlayer(state, input, dt);
   if (state.status !== 'playing') return;
   for (const c of state.chasers) updateChaser(state, c, dt);
+}
+
+/** True once every easter egg is found and the nugget rain is charged. */
+export function canFeast(state: GameState) {
+  return state.secrets.size === SECRETS.length && state.feastCd <= 0 && state.feastTime <= 0
+    && (state.status === 'playing' || state.status === 'caught');
+}
+
+/**
+ * Chicken nuggets rain from the ceiling on every floor. The whole family stops
+ * chasing and goes to eat them for FEAST_TIME seconds.
+ */
+export function startFeast(state: GameState, rand: () => number = state.rand) {
+  if (!canFeast(state)) return false;
+  state.feastTime = FEAST_TIME;
+  state.feastCd = FEAST_RECHARGE;
+  state.food = [];
+  const drop = (floor: number, cx: number, cy: number, n: number, spread: number) => {
+    const map = state.maps[floor];
+    for (let i = 0, tries = 0; i < n && tries < n * 30; tries++) {
+      const x = cx + (rand() * 2 - 1) * spread, y = cy + (rand() * 2 - 1) * spread;
+      if (!map.walkableForFamily(Math.floor(x), Math.floor(y), state.unlocked) || map.isStairs(Math.floor(x), Math.floor(y))) continue;
+      state.food.push({ floor, x, y, drop: 0.2 + rand() * 1.6, eaten: false });
+      i++;
+    }
+  };
+  for (const c of state.chasers) drop(c.floor, c.pos.x, c.pos.y, 4, 2.5);
+  const p = state.player;
+  drop(p.floor, p.pos.x, p.pos.y, 10, 4.5);
+  for (const m of state.maps) drop(m.def.id, m.w / 2, m.h / 2, 8, Math.max(m.w, m.h) / 2);
+  for (const c of state.chasers) {
+    if (c.mode === 'chase' || c.mode === 'alert') state.events.push({ type: 'lost', id: c.def.id });
+    c.mode = 'feast';
+    c.path = [];
+    c.timer = 0.6; // look up in surprise first
+    c.seesPlayer = false;
+  }
+  state.events.push({ type: 'feast' });
+  return true;
+}
+
+function updateFeast(state: GameState, dt: number) {
+  state.feastCd = Math.max(0, state.feastCd - dt);
+  for (const f of state.food) f.drop = Math.max(0, f.drop - dt);
+  if (state.feastTime <= 0) return;
+  state.feastTime -= dt;
+  if (state.feastTime <= 0) {
+    state.feastTime = 0;
+    state.food = state.food.filter((f) => !f.eaten);
+    for (const c of state.chasers) {
+      if (c.mode !== 'feast') continue;
+      c.mode = 'search';
+      c.timer = 1.2;
+      c.lookBase = c.facing;
+      c.path = [];
+    }
+    state.events.push({ type: 'feastEnd' });
+  }
+}
+
+function updateFeaster(state: GameState, c: Chaser, dt: number) {
+  c.seesPlayer = false;
+  c.moving = false;
+  if (c.timer > 0) {
+    c.timer -= dt; // chewing (or looking up at the rain)
+    return;
+  }
+  const near = state.food
+    .filter((f) => !f.eaten && f.drop <= 0 && f.floor === c.floor)
+    .sort((a, b) => Math.hypot(a.x - c.pos.x, a.y - c.pos.y) - Math.hypot(b.x - c.pos.x, b.y - c.pos.y));
+  const food = near[0];
+  if (!food) return;
+  const d = Math.hypot(food.x - c.pos.x, food.y - c.pos.y);
+  if (d < 0.75) {
+    food.eaten = true;
+    c.timer = 1.3;
+    c.path = [];
+    c.facing = Math.atan2(food.y - c.pos.y, food.x - c.pos.x);
+    state.events.push({ type: 'chomp', id: c.def.id, floor: c.floor, x: food.x, y: food.y });
+    return;
+  }
+  c.pathTimer -= dt;
+  if (!c.path.length || c.pathTimer <= 0) {
+    c.path = pathTo(state, c, food) ?? [];
+    c.pathTimer = 0.5;
+    if (!c.path.length) { food.eaten = true; return; } // out of reach: someone else's problem
+  }
+  followPath(state, c, c.def.chaseSpeed * 0.75, dt);
 }
 
 function respawn(state: GameState) {
@@ -323,6 +498,7 @@ function respawn(state: GameState) {
   p.invuln = INVULN_TIME;
   p.dashTime = 0;
   for (const c of state.chasers) if (c.floor === p.floor) Object.assign(c, makeChaser(c.def, c.floor));
+  if (state.feastTime > 0) for (const c of state.chasers) { c.mode = 'feast'; c.path = []; c.timer = 0; }
   state.status = 'playing';
   state.caughtBy = null;
   state.events.push({ type: 'respawn' });
@@ -339,7 +515,17 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
   const len = Math.hypot(mx, my);
   if (len > 1) { mx /= len; my /= len; }
   p.moving = len > 0.1;
-  if (!p.stairsArmed && (!p.moving || mx * p.arriveDir.x + my * p.arriveDir.y < 0.7)) p.stairsArmed = true;
+  if (!p.stairsArmed) {
+    if (!p.moving || mx * p.arriveDir.x + my * p.arriveDir.y < 0.7) p.stairsArmed = true;
+    else {
+      // Just came off the stairs, turned around to face the room. Still holding the
+      // direction we climbed in would walk straight back onto the stairs, so wait
+      // until the player lets go or picks a new direction.
+      mx = 0;
+      my = 0;
+      p.moving = false;
+    }
+  }
 
   if (input.dash && p.dashCd <= 0 && p.moving) {
     p.dashTime = DASH_TIME;
@@ -370,6 +556,14 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
     }
   }
 
+  // Easter eggs
+  for (const sd of SECRETS) {
+    if (state.secrets.has(sd.id) || !touchingSecret(sd, p.floor, p.pos, PLAYER_RADIUS)) continue;
+    state.secrets.add(sd.id);
+    const c = closestPoint(sd, p.pos);
+    state.events.push({ type: 'secret', id: sd.id, x: c.x, y: c.y });
+  }
+
   // Keys
   for (const k of state.keys) {
     if (k.taken || k.floor !== p.floor) continue;
@@ -386,8 +580,19 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
   // Escape through the front door
   const door = map.door(tx, ty);
   if (door && door.color === 'gold' && state.unlocked.has('gold') && p.pos.y > ty + 0.45) {
-    state.status = 'won';
-    state.events.push({ type: 'win' });
+    if (state.noBoss) {
+      state.status = 'won';
+      state.events.push({ type: 'win' });
+    } else {
+      // Out in the front garden... but someone is waiting there.
+      state.status = 'bossIntro';
+      state.boss = makeBoss(state);
+      state.shots = [];
+      p.pos = { x: ENTRY.x, y: ENTRY.y };
+      p.facing = Math.PI / 2;
+      p.moving = false;
+      state.events.push({ type: 'bossIntro' });
+    }
     return;
   }
 
@@ -410,10 +615,53 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
       p.invuln = Math.max(p.invuln, 0.8);
       p.stairsArmed = false;
       p.arriveDir = { x: mx, y: my };
+      p.facing = awayFromStairs(state.maps[to], p.pos) ?? p.facing + Math.PI;
       state.checkpoint = { floor: to, x: p.pos.x, y: p.pos.y };
       state.events.push({ type: 'floor', floor: to });
     }
   }
+}
+
+/**
+ * Where a family member wanders next: usually one of their usual spots (in any
+ * order), sometimes a random spot around their part of the house.
+ */
+function pickWander(state: GameState, c: Chaser): Vec[] {
+  const r = state.rand;
+  const map = state.maps[c.floor];
+  const wps = c.def.waypoints;
+  const here = { x: Math.floor(c.pos.x), y: Math.floor(c.pos.y) };
+  const xs = wps.map((w) => w[0]), ys = wps.map((w) => w[1]);
+  const box = { x0: Math.min(...xs) - 3, x1: Math.max(...xs) + 3, y0: Math.min(...ys) - 3, y1: Math.max(...ys) + 3 };
+  for (let tries = 0; tries < 12; tries++) {
+    let tx: number, ty: number;
+    if (r() < 0.55) {
+      const i = Math.floor(r() * wps.length);
+      if (i === c.wp && wps.length > 1) continue;
+      [tx, ty] = wps[i];
+      c.wp = i;
+    } else {
+      tx = Math.floor(box.x0 + r() * (box.x1 - box.x0 + 1));
+      ty = Math.floor(box.y0 + r() * (box.y1 - box.y0 + 1));
+      if (!map.walkableForFamily(tx, ty, state.unlocked) || map.isStairs(tx, ty)) continue;
+    }
+    if (Math.abs(tx - here.x) + Math.abs(ty - here.y) < 3) continue;
+    const path = pathTo(state, c, { x: tx + 0.5, y: ty + 0.5 });
+    const last = path?.[path.length - 1];
+    // Only exact, reasonably short trips: no wandering behind locked doors or across the whole house.
+    if (path && last && Math.floor(last.x) === tx && Math.floor(last.y) === ty && path.length < 40) return path;
+  }
+  return [];
+}
+
+/** Facing angle pointing from the nearby stairs toward `pos`: into the room. */
+function awayFromStairs(map: FloorMap, pos: Vec): number | null {
+  let sx = 0, sy = 0, n = 0;
+  for (let y = Math.floor(pos.y) - 3; y <= Math.floor(pos.y) + 3; y++)
+    for (let x = Math.floor(pos.x) - 3; x <= Math.floor(pos.x) + 3; x++)
+      if (map.isStairs(x, y)) { sx += x + 0.5; sy += y + 0.5; n++; }
+  if (!n) return null;
+  return Math.atan2(pos.y - sy / n, pos.x - sx / n);
 }
 
 function pathTo(state: GameState, c: Chaser, target: Vec): Vec[] | null {
@@ -462,6 +710,7 @@ function followPath(state: GameState, c: Chaser, speed: number, dt: number) {
 }
 
 function updateChaser(state: GameState, c: Chaser, dt: number) {
+  if (c.mode === 'feast') return updateFeaster(state, c, dt);
   const p = state.player;
   const s = state.settings;
   const sameFloor = p.floor === c.floor;
@@ -488,32 +737,33 @@ function updateChaser(state: GameState, c: Chaser, dt: number) {
 
   switch (c.mode) {
     case 'patrol': {
+      const r = state.rand;
       if (c.pause > 0) {
+        // Standing around, looking this way and that.
         c.pause -= dt;
         c.moving = false;
-        c.facing = c.lookBase + Math.sin(c.pause * 2.6) * 0.9;
-        if (c.pause <= 0) c.wp = (c.wp + 1) % c.def.waypoints.length;
+        c.facing = c.lookBase + Math.sin(c.pause * (1.8 + c.stride * 1.6) + c.walkPhase) * (0.5 + c.stride * 0.6);
         break;
       }
       if (!c.path.length) {
-        // Skip waypoints that are behind locked doors.
-        for (let tries = 0; tries < c.def.waypoints.length; tries++) {
-          const w = c.def.waypoints[c.wp];
-          const path = pathTo(state, c, { x: w[0] + 0.5, y: w[1] + 0.5 });
-          const exact = path && path.length && Math.floor(path[path.length - 1].x) === w[0] && Math.floor(path[path.length - 1].y) === w[1];
-          if (path && exact) { c.path = path; break; }
-          if (Math.floor(c.pos.x) === w[0] && Math.floor(c.pos.y) === w[1]) { c.path = []; break; }
-          c.wp = (c.wp + 1) % c.def.waypoints.length;
-        }
+        c.path = pickWander(state, c);
+        c.stride = 0.75 + r() * 0.55;
         if (!c.path.length) {
-          c.pause = 1.2;
+          c.pause = 0.6 + r() * 1.2;
           c.lookBase = c.facing;
           break;
         }
       }
-      if (followPath(state, c, c.def.patrolSpeed * s.patrolMult, dt)) {
-        c.pause = 1.1;
-        c.lookBase = c.facing;
+      // Now and then stop mid-walk to look around, or change their mind and go somewhere else.
+      if (r() < dt * 0.12) {
+        c.pause = 0.5 + r() * 1.3;
+        c.lookBase = c.facing + (r() - 0.5) * 2;
+        if (r() < 0.5) c.path = [];
+        break;
+      }
+      if (followPath(state, c, c.def.patrolSpeed * s.patrolMult * c.stride, dt)) {
+        c.pause = r() < 0.25 ? 0.15 : 0.5 + r() * 2.2;
+        c.lookBase = c.facing + (r() - 0.5) * 1.5;
       }
       break;
     }

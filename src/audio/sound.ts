@@ -83,6 +83,26 @@ export class Sound {
     [784, 988, 1175, 1568].forEach((f, i) => this.tone(f, 0.25, { type: 'triangle', vol: 0.25, at: t + i * 0.07 }));
     [1568, 2093].forEach((f, i) => this.tone(f, 0.4, { type: 'sine', vol: 0.12, at: t + 0.3 + i * 0.08 }));
   }
+  /** Nugget rain: a fanfare, then nuggets pattering down. */
+  feast() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.28, { type: 'square', vol: 0.09, at: t + i * 0.09 }));
+    for (let i = 0; i < 18; i++) this.noise(0.04, 0.12, 900 + Math.random() * 900, t + 0.5 + i * 0.09 + Math.random() * 0.05);
+  }
+  chomp() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.noise(0.06, 0.18, 1800, t);
+    this.noise(0.05, 0.14, 1500, t + 0.14);
+  }
+  /** A sparkly "you found a secret" jingle. */
+  secret() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    [1047, 1319, 1568, 2093, 1568, 2093, 2637].forEach((f, i) => this.tone(f, 0.22, { type: 'sine', vol: 0.18, at: t + i * 0.06 }));
+    [523, 659, 784].forEach((f, i) => this.tone(f, 0.6, { type: 'triangle', vol: 0.1, at: t + 0.1 + i * 0.02 }));
+  }
   unlock_() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
@@ -114,6 +134,34 @@ export class Sound {
   step_() {
     this.noise(0.03, 0.05, 1800 + Math.random() * 600);
   }
+  squirt() {
+    this.noise(0.09, 0.22, 700 + Math.random() * 200);
+    this.tone(180, 0.08, { type: 'sine', vol: 0.08, slide: 0.6 });
+  }
+  splat() {
+    this.noise(0.1, 0.3, 450);
+    this.tone(260 + Math.random() * 60, 0.12, { type: 'triangle', vol: 0.12, slide: 0.5 });
+  }
+  whoosh() {
+    this.noise(0.3, 0.2, 1500);
+  }
+  thud() {
+    if (!this.ctx) return;
+    this.tone(70, 0.5, { type: 'sine', vol: 0.5, slide: 0.5 });
+    this.noise(0.25, 0.45, 220);
+  }
+  refill() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    [440, 660].forEach((f, i) => this.tone(f, 0.12, { type: 'triangle', vol: 0.12, at: t + i * 0.06 }));
+  }
+  bossDown() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.tone(300, 0.9, { type: 'triangle', vol: 0.2, slide: 0.3, at: t });
+    this.thud();
+    [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.3, { type: 'square', vol: 0.08, at: t + 0.6 + i * 0.1 }));
+  }
   stairs() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
@@ -138,6 +186,13 @@ export class Sound {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     [392, 370, 349, 330].forEach((f, i) => this.tone(f, 0.45, { type: 'triangle', vol: 0.2, at: t + i * 0.3, slide: 0.98 }));
+  }
+  /** Something pops into view (a ketchup bottle appears). */
+  pop() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.tone(420, 0.08, { type: 'sine', vol: 0.22, at: t });
+    this.tone(880, 0.12, { type: 'sine', vol: 0.18, at: t + 0.06 });
   }
   click() {
     this.tone(880, 0.06, { type: 'triangle', vol: 0.15 });

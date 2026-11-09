@@ -1,6 +1,7 @@
 import { findPath } from './path';
 import { currentObjective, findDoor, type GameState, type Input } from './state';
 import { KEY_ORDER, type KeyColor } from './types';
+import { bossBotInput } from './boss';
 import { buildMaps } from './map';
 import type { FloorDef } from './types';
 
@@ -9,9 +10,10 @@ import type { FloorDef } from './types';
  * (and handy for demos): it produces the same input a player would.
  */
 export function botInput(state: GameState): Input {
+  if (state.status === 'boss') return bossBotInput(state);
   const obj = currentObjective(state);
   const p = state.player;
-  if (!obj || state.status !== 'playing') return { mx: 0, my: 0, dash: false };
+  if (!obj || obj.action === 'boss' || state.status !== 'playing') return { mx: 0, my: 0, dash: false };
 
   let goalFloor: number, gx: number, gy: number;
   if (obj.action === 'find') {
