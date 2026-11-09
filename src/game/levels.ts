@@ -1,4 +1,4 @@
-import type { FloorDef, Furniture, FurnitureKind, BlockKind } from './types';
+import type { FloorDef, Furniture, FurnitureKind, BlockKind, KeyColor } from './types';
 
 const f = (kind: FurnitureKind, x: number, y: number, w: number, h: number, block: BlockKind, color?: string): Furniture => ({
   kind, x, y, w, h, block, color,
@@ -240,3 +240,158 @@ export const FLOORS: FloorDef[] = [
 
 /** Where the nugget begins: hopping off the dinner plate, just south of the dining table. */
 export const START = { floor: 0, x: 16.5, y: 6.6, plate: { x: 17, y: 3.5 } };
+
+// ================================================================ Level 2: the grocery store
+
+/**
+ * Key chain: green (on the sales floor, by the deli) -> Cold Room -> orange -> Stockroom
+ *   -> gold -> Manager's Office (the goal).
+ * Shelves and racks are tall: the employees can't see through them.
+ */
+export const STORE: FloorDef[] = [
+  {
+    id: 0,
+    name: 'FreshMart',
+    rows: [
+      '####################################',
+      '#...........#...........#..........#',
+      '#...........#...........#..........#',
+      '#...........#...........#..........#',
+      '#...........#...........#..........#',
+      '#####g###########o#######..........#',
+      '#.......................#..........#',
+      '#.......................#..........#',
+      '#.......................#..........#',
+      '#.......................#####f######',
+      '#..................................#',
+      '#..................................#',
+      '#..................................#',
+      '#..................................#',
+      '#..................................#',
+      '#..................................#',
+      '#..................................#',
+      '#..................................#',
+      '#..................................#',
+      '#..................................#',
+      '#..................................#',
+      '#..................................#',
+      '#..................................#',
+      '####################################',
+    ],
+    rooms: [
+      { id: 'cold', name: 'Cold Room', seed: [8, 2], style: 'concrete', wall: '#bfe3f2', door: 'green' },
+      { id: 'stock', name: 'Stockroom', seed: [16, 2], style: 'concrete', wall: '#cdb999', door: 'orange' },
+      { id: 'office', name: "Manager's Office", seed: [30, 5], style: 'officeCarpet', wall: '#d9c8ef', door: 'gold' },
+      { id: 'sales', name: 'Sales Floor', seed: [12, 19], style: 'storeTile', wall: '#f3eedd' },
+    ],
+    furniture: [
+      // Cold Room: walk-in freezers and stacked crates
+      f('freezer', 1, 1, 4, 1, 'solid', '#5fb7e8'),
+      f('freezer', 7, 1, 4, 1, 'solid', '#5fb7e8'),
+      f('pallet', 1, 3, 2, 2, 'hide'),
+      // Stockroom
+      f('rack', 13, 1, 4, 1, 'solid'),
+      f('rack', 19, 1, 5, 1, 'solid'),
+      f('boxes', 13, 3, 2, 2, 'solid'),
+      f('pallet', 19, 3, 2, 1, 'hide'),
+      // Manager's Office
+      f('rug', 27, 3, 6, 4, 'none', '#6a5acd'),
+      f('officeDesk', 28, 2, 4, 1, 'hide'),
+      f('bookshelf', 34, 1, 1, 3, 'solid'),
+      f('trophyCase', 25, 1, 2, 1, 'solid'),
+      f('plant', 25, 8, 1, 1, 'solid'),
+      f('armchair', 33, 6, 2, 2, 'solid'),
+      // Sales floor: fruit and veg up top
+      f('produce', 1, 7, 2, 2, 'hide', '#e74c3c'),
+      f('produce', 8, 7, 3, 2, 'hide', '#f1c40f'),
+      f('produce', 15, 7, 3, 2, 'hide', '#58c13f'),
+      f('cart', 21, 7, 1, 1, 'hide'),
+      // Aisles (tall shelves)
+      f('shelf', 3, 11, 2, 7, 'solid', '#e8424a'),
+      f('shelf', 8, 11, 2, 7, 'solid', '#3d7df0'),
+      f('shelf', 13, 11, 2, 7, 'solid', '#f68b2a'),
+      f('shelf', 18, 11, 2, 7, 'solid', '#9b5de5'),
+      // Checkouts by the entrance
+      f('checkout', 3, 20, 2, 1, 'solid'),
+      f('checkout', 8, 20, 2, 1, 'solid'),
+      f('checkout', 13, 20, 2, 1, 'solid'),
+      f('cart', 22, 21, 1, 1, 'hide'),
+      f('cart', 23, 21, 1, 1, 'hide'),
+      // Deli, frozen food (the nugget shelf) and bakery
+      f('deli', 34, 11, 1, 6, 'solid'),
+      f('freezer', 25, 14, 6, 1, 'solid', '#5fb7e8'),
+      f('bakery', 28, 18, 2, 2, 'hide'),
+      f('plant', 34, 22, 1, 1, 'solid'),
+    ],
+    keys: [
+      { color: 'green', x: 33, y: 20 },
+      { color: 'orange', x: 10, y: 3 },
+      { color: 'gold', x: 22, y: 3 },
+    ],
+    family: [
+      {
+        id: 'kevin', name: 'Kevin the cashier', kind: 'cashier', start: [6, 21],
+        waypoints: [[2, 22], [6, 21], [11, 22], [11, 19], [2, 19]],
+        patrolSpeed: 1.7, chaseSpeed: 3.6, visionRange: 5.5, fovDeg: 85, giveUp: 3,
+      },
+      {
+        id: 'brenda', name: 'Brenda the stocker', kind: 'stocker', start: [6, 14],
+        waypoints: [[6, 10], [6, 18], [11, 18], [11, 10], [16, 10], [16, 18], [21, 10]],
+        patrolSpeed: 1.9, chaseSpeed: 3.7, visionRange: 6, fovDeg: 80, giveUp: 3,
+      },
+      {
+        id: 'dan', name: 'Deli Dan', kind: 'butcher', start: [30, 12],
+        waypoints: [[26, 12], [32, 12], [33, 18], [26, 20], [24, 16], [24, 11]],
+        patrolSpeed: 1.8, chaseSpeed: 3.6, visionRange: 6, fovDeg: 85, giveUp: 3,
+      },
+      {
+        id: 'priya', name: 'Priya the clerk', kind: 'clerk', start: [12, 9],
+        waypoints: [[3, 6], [12, 9], [22, 6], [17, 6], [6, 9]],
+        patrolSpeed: 1.8, chaseSpeed: 3.7, visionRange: 5.5, fovDeg: 90, giveUp: 3,
+      },
+      {
+        id: 'stan', name: 'Stan the stockroom boss', kind: 'stocker', start: [17, 3],
+        waypoints: [[16, 2], [22, 2], [22, 4], [16, 4]],
+        patrolSpeed: 1.6, chaseSpeed: 3.5, visionRange: 5, fovDeg: 90, giveUp: 2.5,
+      },
+    ],
+    lights: [[6, 3], [18, 3], [30, 4], [6, 8], [17, 8], [6, 14], [16, 14], [29, 12], [29, 19], [10, 20]],
+  },
+];
+
+export type LevelId = 1 | 2;
+
+export interface LevelDef {
+  id: LevelId;
+  name: string;
+  floors: FloorDef[];
+  /** Where the nugget begins (Level 1 adds the dinner plate it hops off). */
+  start: { floor: number; x: number; y: number; plate?: { x: number; y: number } };
+  /** Keys in the order the player needs them. The last one is gold. */
+  keyOrder: KeyColor[];
+  /** 'frontDoor': out the gold front door (then the boss). A room id: walk into that room to win. */
+  goal: 'frontDoor' | string;
+  /** Caught by staff: put back on this shelf spot instead of the last checkpoint. */
+  shelf?: { floor: number; x: number; y: number };
+  /** What surrounds the building. */
+  outside: 'garden' | 'parking';
+  /** Easter eggs and the nugget rain only live in the house. */
+  secrets: boolean;
+}
+
+export const LEVEL1: LevelDef = {
+  id: 1, name: 'The House', floors: FLOORS, start: START,
+  keyOrder: ['red', 'teal', 'orange', 'green', 'purple', 'blue', 'pink', 'gold'],
+  goal: 'frontDoor', outside: 'garden', secrets: true,
+};
+
+export const LEVEL2: LevelDef = {
+  id: 2, name: 'The Grocery Store', floors: STORE,
+  start: { floor: 0, x: 17.5, y: 20.6 },
+  keyOrder: ['green', 'orange', 'gold'],
+  goal: 'office',
+  shelf: { floor: 0, x: 27.5, y: 15.6 },
+  outside: 'parking', secrets: false,
+};
+
+export const LEVELS: Record<LevelId, LevelDef> = { 1: LEVEL1, 2: LEVEL2 };

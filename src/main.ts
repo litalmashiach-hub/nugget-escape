@@ -4,6 +4,8 @@ import { botInput } from './game/bot';
 import { beginBossFight, makeBoss, ENTRY } from './game/boss';
 import { SECRETS } from './game/secrets';
 import { KEY_INFO, type Difficulty } from './game/types';
+import type { LevelId } from './game/levels';
+import { STREET_LENGTH } from './render/street';
 import { Scene } from './render/scene';
 import { CUTSCENE_LENGTH, BOSS_INTRO_LENGTH } from './render/cutscene';
 import { drawNuggetPortrait } from './render/paint';
@@ -15,26 +17,44 @@ const STEP = 1 / 60;
 const params = new URLSearchParams(location.search);
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-type Mode = 'menu' | 'cutscene' | 'bossCutscene' | 'game' | 'paused' | 'ended';
+type Mode = 'menu' | 'cutscene' | 'bossCutscene' | 'street' | 'game' | 'paused' | 'ended';
 
 function fmtTime(s: number) {
   const m = Math.floor(s / 60);
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 }
 
-function loadBest(d: Difficulty): number | null {
+const bestKey = (d: Difficulty, level: LevelId) => (level === 1 ? `nugget-best-${d}` : `nugget-best-l${level}-${d}`);
+
+function loadBest(d: Difficulty, level: LevelId = 1): number | null {
   try {
-    const v = localStorage.getItem(`nugget-best-${d}`);
+    const v = localStorage.getItem(bestKey(d, level));
     return v ? Number(v) : null;
   } catch {
     return null;
   }
 }
-function saveBest(d: Difficulty, t: number) {
+function saveBest(d: Difficulty, t: number, level: LevelId = 1) {
   try {
-    localStorage.setItem(`nugget-best-${d}`, String(t));
+    localStorage.setItem(bestKey(d, level), String(t));
   } catch {
     /* storage unavailable: best time just isn't remembered */
+  }
+}
+
+/** Level 2 opens once Level 1 has been beaten (remembered on this device). */
+function level2Unlocked() {
+  try {
+    return localStorage.getItem('nugget-level2') === '1';
+  } catch {
+    return false;
+  }
+}
+function unlockLevel2() {
+  try {
+    localStorage.setItem('nugget-level2', '1');
+  } catch {
+    /* storage unavailable: it stays unlocked until the page reloads */
   }
 }
 
@@ -70,7 +90,11 @@ async function boot() {
   const useBot = params.has('bot');
   const speed = Math.max(1, Math.min(20, Number(params.get('speed')) || 1));
 
+  let level2Open = level2Unlocked() || params.get('level') === '2';
+  let level: LevelId = params.get('level') === '2' ? 2 : 1;
   let state: GameState = createGame(difficulty, opts);
+  let nextTimer = 0;
+  let nextTick = 0;
   let mode: Mode = 'menu';
   let acc = 0;
   let stepTimer = 0;
@@ -92,10 +116,40 @@ async function boot() {
   drawNuggetPortrait(hctx, 80);
 
   const showBest = () => {
-    const b = loadBest(difficulty);
-    $('best-time').textContent = b ? `Best escape on ${difficulty}: ${fmtTime(b)}` : '';
+    const b = loadBest(difficulty, level);
+    $('best-time').textContent = b ? `Best ${level === 2 ? 'Level 2 time' : 'escape'} on ${difficulty}: ${fmtTime(b)}` : '';
   };
   showBest();
+
+  // Level buttons (Level 2 stays locked until Level 1 is beaten)
+  const story1 = { eyebrow: $('title-eyebrow').textContent!, story: $('title-story').textContent! };
+  const story2 = {
+    eyebrow: 'Level 2: The Grocery Store',
+    story: 'Free at last, the nugget wonders: why am I alive? Maybe the answer is in the grocery store! Sneak past the staff, who want to put you back on the shelf and win Employee of the Month. Find the keys and get into the Manager\'s Office.',
+  };
+  const syncLevels = () => {
+    document.querySelectorAll<HTMLButtonElement>('.levels button').forEach((b) => {
+      const id = Number(b.dataset.level) as LevelId;
+      b.disabled = id === 2 && !level2Open;
+      const on = id === level;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-checked', String(on));
+    });
+    const st = level === 2 ? story2 : story1;
+    $('title-eyebrow').textContent = st.eyebrow;
+    $('title-story').textContent = st.story;
+  };
+  document.querySelectorAll<HTMLButtonElement>('.levels button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      level = Number(btn.dataset.level) as LevelId;
+      syncLevels();
+      showBest();
+      sound.unlock();
+      sound.click();
+    });
+  });
+  syncLevels();
 
   // Difficulty buttons
   document.querySelectorAll<HTMLButtonElement>('.difficulty button').forEach((btn) => {
@@ -126,15 +180,25 @@ async function boot() {
     setTimeout(() => (f.hidden = true), 700);
   };
 
-  /** Play the dinner cutscene, then start the game. */
+  const cancelNext = () => {
+    clearTimeout(nextTimer);
+    clearInterval(nextTick);
+    $('win-next-note').hidden = true;
+  };
+
+  /** Play the level's opening cutscene (dinner, or the walk to the store), then start. */
   function playCutscene() {
+    cancelNext();
     sound.unlock();
     sound.click();
-    state = createGame(difficulty, opts);
+    state = createGame(difficulty, { ...opts, level });
+    scene.prepare(state);
     scene.reset();
     scene.cutscene.reset();
+    scene.street.reset();
     hud.reset();
-    mode = 'cutscene';
+    lastCaption = '';
+    mode = level === 2 ? 'street' : 'cutscene';
     show(null);
     $('hud').hidden = true;
     $('touch').hidden = true;
@@ -144,7 +208,7 @@ async function boot() {
 
   function endCutscene() {
     if (mode === 'bossCutscene') return endBossCutscene();
-    if (mode !== 'cutscene') return;
+    if (mode !== 'cutscene' && mode !== 'street') return;
     $('cutscene').hidden = true;
     start(true);
     fadeIn();
@@ -181,10 +245,13 @@ async function boot() {
   }
 
   function start(afterCutscene = false) {
+    cancelNext();
     sound.unlock();
     setBossUi(false);
     if (!afterCutscene) sound.click();
-    state = createGame(difficulty, { ...opts, skipIntro: afterCutscene });
+    // Level 2 always walks in through the doors; Level 1 skips the plate hop after the cutscene.
+    state = createGame(difficulty, { ...opts, level, skipIntro: afterCutscene && level === 1 });
+    scene.prepare(state);
     scene.reset();
     scene.snapCamera();
     hud.reset();
@@ -196,10 +263,14 @@ async function boot() {
     $('hud').hidden = false;
     $('touch').hidden = !isTouch();
     sound.startMusic();
-    hud.toast(afterCutscene ? 'Run! Find the <b style="color:#e8424a">Red key</b> first.' : 'Hop off the plate and find the <b style="color:#e8424a">Red key</b>!', '', 3200);
+    const first = KEY_INFO[state.level.keyOrder[0]];
+    const keyHtml = `<b style="color:${first.hex}">${first.label} key</b>`;
+    if (level === 2) hud.toast(`Sneak past the staff and find the ${keyHtml}!`, '', 3200);
+    else hud.toast(afterCutscene ? `Run! Find the ${keyHtml} first.` : `Hop off the plate and find the ${keyHtml}!`, '', 3200);
   }
 
   function toMenu() {
+    cancelNext();
     mode = 'menu';
     setBossUi(false);
     $('cutscene').hidden = true;
@@ -210,7 +281,16 @@ async function boot() {
     $('hud').hidden = true;
     $('touch').hidden = true;
     showBest();
+    syncLevels();
     show('screen-title');
+  }
+
+  /** Straight from the Level 1 win screen into Level 2. */
+  function playLevel2() {
+    level = 2;
+    level2Open = true;
+    syncLevels();
+    playCutscene();
   }
 
   function togglePause() {
@@ -287,6 +367,7 @@ async function boot() {
   $('btn-again').addEventListener('click', restart);
   $('btn-retry').addEventListener('click', restart);
   $('btn-win-menu').addEventListener('click', toMenu);
+  $('btn-next').addEventListener('click', playLevel2);
   $('btn-over-menu').addEventListener('click', toMenu);
   $('btn-pause').addEventListener('click', togglePause);
   $('btn-sound').addEventListener('click', toggleMute);
@@ -306,7 +387,7 @@ async function boot() {
   controls.bindMouse($('stage'));
   window.addEventListener('keydown', (e) => {
     if (mode === 'menu' && e.code === 'Enter') playCutscene();
-    else if ((mode === 'cutscene' || mode === 'bossCutscene') && (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter')) {
+    else if ((mode === 'cutscene' || mode === 'bossCutscene' || mode === 'street') && (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter')) {
       e.preventDefault();
       endCutscene();
     }
@@ -352,7 +433,7 @@ async function boot() {
         const info = KEY_INFO[e.color];
         sound.unlock_();
         hud.toast(e.color === 'gold'
-          ? '<span class="sw" style="background:#f5c518;color:#f5c518"></span>The front door is open! Run outside!'
+          ? `<span class="sw" style="background:#f5c518;color:#f5c518"></span>${state.level.id === 2 ? "The Manager's Office is open! Get inside!" : 'The front door is open! Run outside!'}`
           : `<span class="sw" style="background:${info.hex};color:${info.hex}"></span>${info.label} door unlocked`);
         break;
       }
@@ -378,7 +459,9 @@ async function boot() {
       case 'caught': {
         sound.caught();
         const c = state.chasers.find((c) => c.def.id === e.by)!;
-        hud.toast(state.lives > 0 ? `${c.def.name} caught you! ${state.lives} ${state.lives === 1 ? 'life' : 'lives'} left.` : `${c.def.name} caught you!`, 'danger', 2400);
+        const lives = `${state.lives} ${state.lives === 1 ? 'life' : 'lives'} left.`;
+        if (state.level.shelf) hud.toast(state.lives > 0 ? `${c.def.name} put you back on the shelf! ${lives}` : `${c.def.name} caught you!`, 'danger', 2600);
+        else hud.toast(state.lives > 0 ? `${c.def.name} caught you! ${lives}` : `${c.def.name} caught you!`, 'danger', 2400);
         break;
       }
       case 'floor':
@@ -431,11 +514,24 @@ async function boot() {
         sound.win();
         sound.stopMusic();
         mode = 'ended';
-        const best = loadBest(state.difficulty);
+        const lv = state.level.id;
+        const best = loadBest(state.difficulty, lv);
         const isBest = best === null || state.time < best;
-        if (isBest) saveBest(state.difficulty, state.time);
+        if (isBest) saveBest(state.difficulty, state.time, lv);
         const stars = Math.max(1, 3 - state.timesCaught);
+        const firstWin = lv === 1 && !level2Unlocked();
+        if (lv === 1) { unlockLevel2(); level2Open = true; }
         setTimeout(() => {
+          if (mode !== 'ended') return;
+          $('win-eyebrow').textContent = lv === 2 ? 'Employee of the month? Not today!' : 'Freedom!';
+          $('win-title').textContent = lv === 2 ? "You made it to the Manager's Office!" : 'You escaped!';
+          const sub = $('win-sub');
+          sub.hidden = lv === 1 && !firstWin;
+          sub.textContent = lv === 2
+            ? 'A sticky note on the manager\'s desk says: "Why are you alive? To go on adventures, little nugget!"'
+            : 'Level 2 unlocked: The Grocery Store!';
+          $('win-secrets-box').hidden = !state.level.secrets;
+          $('btn-next').hidden = lv !== 1;
           $('win-stars').innerHTML = [0, 1, 2].map((i) => `<span class="s ${i < stars ? 'on' : ''}" style="animation-delay:${0.2 + i * 0.18}s">★</span>`).join('');
           $('win-time').textContent = fmtTime(state.time);
           $('win-spotted').textContent = String(state.timesSpotted);
@@ -444,6 +540,17 @@ async function boot() {
           $('win-best').textContent = isBest ? 'New!' : fmtTime(best!);
           $('touch').hidden = true;
           show('screen-win');
+          if (lv === 1) {
+            // Level 2 starts by itself after a short countdown (or straight away with the button).
+            let left = useBot ? 1 : 8;
+            const note = $('win-next-note');
+            const tick = () => { note.textContent = `Level 2 starts in ${left}…`; };
+            note.hidden = false;
+            tick();
+            nextTick = window.setInterval(() => { left = Math.max(0, left - 1); tick(); }, 1000);
+            nextTimer = window.setTimeout(() => { cancelNext(); if (mode === 'ended') playLevel2(); }, left * 1000);
+            $('btn-next').focus({ preventScroll: true });
+          }
         }, 1600);
         break;
       }
@@ -453,6 +560,8 @@ async function boot() {
         mode = 'ended';
         $('over-text').textContent = state.boss
           ? 'Uncle Gus got you! Keep moving, dodge the drumsticks and jump away from his belly slam.'
+          : state.level.shelf
+          ? `${state.caughtBy ?? 'The staff'} put you back on the shelf for good. Hide under the fruit stands and shopping carts!`
           : `${state.caughtBy ?? 'The family'} caught you one time too many. Try sneaking and hiding under furniture!`;
         $('touch').hidden = true;
         show('screen-over');
@@ -468,7 +577,8 @@ async function boot() {
   let lastCaption = '';
   function cutsceneFrame(dt: number) {
     const boss = mode === 'bossCutscene';
-    const cs = boss ? scene.bossCut : scene.cutscene;
+    const street = mode === 'street';
+    const cs = boss ? scene.bossCut : street ? scene.street : scene.cutscene;
     for (const e of cs.events) {
       if (e === 'gasp') sound.alert();
       else if (e === 'jump') sound.dash();
@@ -493,7 +603,7 @@ async function boot() {
         caption.classList.add('in');
       }
     }
-    bar.style.transform = `scaleX(${cs.t / (boss ? BOSS_INTRO_LENGTH : CUTSCENE_LENGTH)})`;
+    bar.style.transform = `scaleX(${cs.t / (boss ? BOSS_INTRO_LENGTH : street ? STREET_LENGTH : CUTSCENE_LENGTH)})`;
     $('cutscene').style.setProperty('--fade', String(cs.fade));
     if (cs.done) endCutscene();
     void dt;
@@ -520,9 +630,9 @@ async function boot() {
       sound.intensity = state.boss && state.status === 'boss' ? 1 : state.chasers.some((c) => c.floor === state.player.floor && (c.mode === 'chase' || c.mode === 'alert')) ? 1 : 0;
       scene.render(state, dt, 'game');
       hud.update(state);
-    } else if (mode === 'cutscene' || mode === 'bossCutscene') {
-      scene.render(state, dt * speed, mode === 'cutscene' ? 'cutscene' : 'bossIntro');
-      if (mode === 'bossCutscene' || mode === 'cutscene') cutsceneFrame(dt);
+    } else if (mode === 'cutscene' || mode === 'bossCutscene' || mode === 'street') {
+      scene.render(state, dt * speed, mode === 'cutscene' ? 'cutscene' : mode === 'street' ? 'street' : 'bossIntro');
+      cutsceneFrame(dt);
     } else {
       scene.render(state, dt, mode === 'menu' ? 'menu' : 'game');
     }
@@ -533,14 +643,18 @@ async function boot() {
   (window as unknown as { __nugget: unknown }).__nugget = {
     get state() { return state; },
     get mode() { return mode; },
-    get cutsceneTime() { return mode === 'bossCutscene' ? scene.bossCut.t : scene.cutscene.t; },
+    get cutsceneTime() { return mode === 'bossCutscene' ? scene.bossCut.t : mode === 'street' ? scene.street.t : scene.cutscene.t; },
+    get level() { return level; },
+    /** Pick a level as if from the menu (Level 2 must be unlocked, or ?level=2 used). */
+    setLevel: (id: LevelId) => { if (id === 1 || level2Open) { level = id; syncLevels(); } return level; },
     start: () => start(),
     playCutscene,
     skipCutscene: endCutscene,
-    seekCutscene: (t: number) => { if (mode === 'bossCutscene') scene.bossCut.t = t; else scene.cutscene.t = t; },
+    seekCutscene: (t: number) => { if (mode === 'bossCutscene') scene.bossCut.t = t; else if (mode === 'street') scene.street.t = t; else scene.cutscene.t = t; },
     /** Jump straight to the front door, as if every key had been found. */
     toFrontDoor: () => {
-      if (mode !== 'game') start();
+      level = 1;
+      if (mode !== 'game' || state.level.id !== 1) start();
       for (const k of state.keys) { state.held.add(k.color); state.unlocked.add(k.color); }
       state.player.floor = 0;
       state.player.pos = { ...ENTRY };

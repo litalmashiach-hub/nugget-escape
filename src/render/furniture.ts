@@ -116,6 +116,82 @@ function plateSet(b: Builder, x: number, y: number, z: number, food: boolean) {
   }
 }
 
+
+// ---------------------------------------------------------------- grocery store (Level 2)
+
+const PRODUCT_COLORS = ['#e8424a', '#f5c518', '#3d7df0', '#58c13f', '#f68b2a', '#9b5de5', '#ffffff', '#f2679f', '#22c3b8'];
+
+/** Runs `fn(along, across)` in a frame where `along` follows the item's long side. */
+function longSide(w: number, h: number) {
+  const alongZ = h >= w;
+  return {
+    len: alongZ ? h : w,
+    depth: alongZ ? w : h,
+    /** box helper in (along, y, across) coordinates */
+    box: (b: Builder, a: number, y: number, c: number, la: number, hy: number, lc: number, color: string, o = {}) =>
+      alongZ ? box(b, c, y, a, lc, hy, la, color, o) : box(b, a, y, c, la, hy, lc, color, o),
+  };
+}
+
+/** Tall double-sided supermarket shelf, stocked with colorful boxes, cans and bottles. */
+function storeShelf(b: Builder, w: number, h: number, sign: string, seed: number) {
+  const L = longSide(w, h);
+  const R = rng(seed);
+  const H = 2.1;
+  L.box(b, 0.05, 0, 0.1, L.len - 0.1, 0.14, L.depth - 0.2, '#5b6470');
+  L.box(b, 0.05, 0.14, L.depth / 2 - 0.04, L.len - 0.1, H - 0.14, 0.08, '#dfe3e8'); // back panel
+  for (const end of [0.05, L.len - 0.11]) L.box(b, end, 0, 0.1, 0.06, H, L.depth - 0.2, '#c9ced6');
+  const levels = [0.14, 0.62, 1.1, 1.58];
+  for (const y of levels) {
+    L.box(b, 0.1, y, 0.12, L.len - 0.2, 0.04, L.depth - 0.24, '#eef0f3', { metal: 0.3, rough: 0.4 });
+    for (const side of [0, 1]) {
+      let a = 0.14;
+      while (a < L.len - 0.3) {
+        const pw = 0.16 + R() * 0.22;
+        const ph = 0.2 + R() * 0.22;
+        const col = PRODUCT_COLORS[Math.floor(R() * PRODUCT_COLORS.length)];
+        const c0 = side ? L.depth / 2 + 0.06 : 0.16;
+        L.box(b, a, y + 0.04, c0, pw - 0.03, ph, L.depth / 2 - 0.24, col, { rough: 0.6 });
+        a += pw;
+      }
+    }
+  }
+  // colored aisle sign on top
+  L.box(b, L.len / 2 - 0.9, H, L.depth / 2 - 0.03, 1.8, 0.32, 0.06, sign, { emissive: sign, emissiveIntensity: 0.25 });
+}
+
+function storeRack(b: Builder, w: number, h: number, seed: number) {
+  const L = longSide(w, h);
+  const R = rng(seed);
+  for (const a of [0.08, L.len / 2, L.len - 0.14])
+    for (const c of [0.08, L.depth - 0.14]) L.box(b, a, 0, c, 0.06, 2.2, 0.06, '#e07b24', { metal: 0.5, rough: 0.4 });
+  for (const y of [0.25, 1.05, 1.85]) {
+    L.box(b, 0.05, y, 0.05, L.len - 0.1, 0.05, L.depth - 0.1, '#7a6a55');
+    let a = 0.15;
+    while (a < L.len - 0.5) {
+      const s = 0.35 + R() * 0.3;
+      L.box(b, a, y + 0.05, 0.12, s, 0.25 + R() * 0.35, L.depth - 0.24, shade('#c8a26b', (R() - 0.5) * 0.3));
+      a += s + 0.06;
+    }
+  }
+}
+
+function chestFreezer(b: Builder, w: number, h: number, glass: string, seed: number) {
+  const L = longSide(w, h);
+  const R = rng(seed);
+  L.box(b, 0.05, 0, 0.08, L.len - 0.1, 0.85, L.depth - 0.16, '#f4f7fa', { rough: 0.3 });
+  L.box(b, 0.05, 0.1, 0.06, L.len - 0.1, 0.12, L.depth - 0.12, glass); // colored kick stripe
+  // packages inside, seen through the glass lid
+  let a = 0.15;
+  while (a < L.len - 0.35) {
+    const pw = 0.25 + R() * 0.2;
+    const col = R() < 0.4 ? '#f5b942' : PRODUCT_COLORS[Math.floor(R() * PRODUCT_COLORS.length)];
+    L.box(b, a, 0.8, 0.18 + R() * 0.1, pw - 0.04, 0.07, L.depth - 0.5, col);
+    a += pw;
+  }
+  L.box(b, 0.08, 0.88, 0.1, L.len - 0.16, 0.03, L.depth - 0.2, '#bfe6ff', { rough: 0.05, metal: 0.2, emissive: '#2b6f99', emissiveIntensity: 0.25 });
+}
+
 export interface FurnitureBuild extends Builder {
   /** Height of the top surface, for the hide-under fade test. */
   top: number;
@@ -366,6 +442,103 @@ export function buildFurniture(it: Furniture): FurnitureBuild {
       ball(b, 0.5, 0.55, 0.5, 0.6, 0.3, 0.25, '#e8424a');
       ball(b, 0.8, 0.8, 0.5, 0.2, 0.3, 0.18, '#e8424a');
       box(b, 0.1, 0, 0.35, 0.8, 0.08, 0.3, WOOD);
+      break;
+    case 'shelf':
+      storeShelf(b, w, h, it.color ?? '#e8424a', seed);
+      b.top = 2.1;
+      break;
+    case 'rack':
+      storeRack(b, w, h, seed);
+      b.top = 2.2;
+      break;
+    case 'freezer':
+      chestFreezer(b, w, h, it.color ?? '#5fb7e8', seed);
+      break;
+    case 'produce': {
+      // fruit stand on legs: the nugget hides underneath
+      const R = rng(seed);
+      table(b, w, h, 0.8, WOOD_L);
+      box(b, 0.04, 0.8, 0.04, w - 0.08, 0.12, h - 0.08, WOOD);
+      const fruit = it.color ?? '#e74c3c';
+      for (let i = 0; i < w * h * 9; i++)
+        ball(b, 0.2 + R() * (w - 0.4), 0.95 + R() * 0.08, 0.2 + R() * (h - 0.4), 0.17, 0.17, 0.17, shade(fruit, (R() - 0.5) * 0.25));
+      box(b, w / 2 - 0.3, 0.95, -0.02, 0.6, 0.22, 0.03, '#ffffff'); // price card
+      b.top = 0.8;
+      break;
+    }
+    case 'checkout':
+      box(b, 0.05, 0, 0.1, w - 0.1, 0.9, h - 0.2, '#2e9e5b');
+      box(b, 0.1, 0.9, 0.15, w - 0.6, 0.03, h - 0.3, '#222831', { rough: 0.6 }); // belt
+      box(b, w - 0.5, 0.9, 0.2, 0.4, 0.25, 0.45, '#dfe3e8'); // register
+      box(b, w - 0.45, 1.15, 0.3, 0.3, 0.22, 0.04, '#1f2a36', { emissive: '#3aa3ff', emissiveIntensity: 0.5 });
+      cyl(b, w - 0.3, 0.9, 0.15, 0.03, 0.9, '#c9ced6', { metal: 0.5 }); // lane light pole
+      ball(b, w - 0.3, 1.85, 0.15, 0.14, 0.14, 0.14, '#f5c518', { emissive: '#f5c518', emissiveIntensity: 0.6 });
+      break;
+    case 'deli': {
+      const L = longSide(w, h);
+      const R = rng(seed);
+      L.box(b, 0.05, 0, 0.1, L.len - 0.1, 0.8, L.depth - 0.2, '#b9443f');
+      let a = 0.2;
+      while (a < L.len - 0.4) {
+        const col = ['#d9776c', '#f2c6a0', '#c9584b', '#efe0b0'][Math.floor(R() * 4)];
+        L.box(b, a, 0.8, 0.2, 0.35, 0.12, L.depth - 0.4, col);
+        a += 0.45;
+      }
+      L.box(b, 0.05, 0.8, 0.1, L.len - 0.1, 0.5, 0.04, '#cfeeff', { rough: 0.05, metal: 0.2, emissive: '#5aa8d8', emissiveIntensity: 0.15 });
+      L.box(b, 0.05, 1.3, 0.1, L.len - 0.1, 0.04, L.depth - 0.2, '#e8e8e8');
+      break;
+    }
+    case 'cart': {
+      for (const [x, z] of [[0.2, 0.2], [0.8, 0.2], [0.2, 0.8], [0.8, 0.8]]) {
+        cyl(b, x, 0, z, 0.05, 0.06, '#222');
+        cyl(b, x, 0.06, z, 0.02, 0.36, '#b8bec7', { metal: 0.7 });
+      }
+      box(b, 0.1, 0.42, 0.1, 0.8, 0.04, 0.8, '#b8bec7', { metal: 0.7, rough: 0.3 });
+      for (const [x, z, ww, dd] of [[0.1, 0.1, 0.8, 0.03], [0.1, 0.87, 0.8, 0.03], [0.1, 0.1, 0.03, 0.8], [0.87, 0.1, 0.03, 0.8]])
+        box(b, x, 0.46, z, ww, 0.42, dd, '#c9ced6', { metal: 0.7, rough: 0.3 });
+      box(b, 0.1, 0.95, 0.88, 0.8, 0.05, 0.05, '#e8424a'); // handle
+      b.top = 0.42;
+      break;
+    }
+    case 'pallet': {
+      const R = rng(seed);
+      for (const z of [0.1, h / 2 - 0.06, h - 0.22]) box(b, 0.05, 0, z, w - 0.1, 0.32, 0.12, WOOD_L);
+      box(b, 0.05, 0.32, 0.05, w - 0.1, 0.05, h - 0.1, WOOD);
+      for (let i = 0; i < w * h * 2; i++) {
+        const s = 0.4 + R() * 0.2;
+        box(b, 0.1 + R() * (w - s - 0.2), 0.37 + (i % 2) * 0.45, 0.1 + R() * (h - s - 0.2), s, 0.45, s, shade('#c8a26b', (R() - 0.5) * 0.3));
+      }
+      b.top = 0.32;
+      break;
+    }
+    case 'bakery': {
+      const R = rng(seed);
+      table(b, w, h, 0.85, '#efe0c8');
+      for (let i = 0; i < 10; i++)
+        ball(b, 0.3 + R() * (w - 0.6), 0.92, 0.3 + R() * (h - 0.6), 0.32, 0.14, 0.18, shade('#c98a3c', (R() - 0.5) * 0.3));
+      for (let i = 0; i < 6; i++) cyl(b, 0.3 + R() * (w - 0.6), 0.85, 0.3 + R() * (h - 0.6), 0.1, 0.06, '#f2679f'); // donuts
+      b.top = 0.85;
+      break;
+    }
+    case 'officeDesk':
+      table(b, w, h, 0.78, '#6b4a32');
+      box(b, w / 2 - 0.35, 0.78, 0.15, 0.7, 0.45, 0.05, '#1f2a36', { emissive: '#3a7bd5', emissiveIntensity: 0.4 }); // monitor
+      box(b, w / 2 - 0.4, 0.78, 0.45, 0.8, 0.02, 0.25, '#333');
+      box(b, 0.3, 0.78, 0.55, 0.5, 0.12, 0.12, '#f5c518', { metal: 0.6 }); // name plate
+      cyl(b, w - 0.4, 0.78, 0.4, 0.06, 0.12, '#ffffff'); // coffee mug
+      chair(b, w / 2, h + 0.1, -Math.PI / 2);
+      b.top = 0.78;
+      break;
+    case 'trophyCase':
+      box(b, 0.05, 0, 0.05, w - 0.1, 1.8, h - 0.1, '#5e3b22');
+      for (const y of [0.6, 1.2]) box(b, 0.1, y, 0.1, w - 0.2, 0.03, h - 0.2, '#cfeeff', { rough: 0.1 });
+      for (let i = 0; i < 3; i++) {
+        cyl(b, 0.35 + i * 0.6, 1.23, 0.5, 0.08, 0.05, '#f5c518', { metal: 0.8, rough: 0.25 });
+        cyl(b, 0.35 + i * 0.6, 1.28, 0.5, 0.04, 0.12, '#f5c518', { metal: 0.8, rough: 0.25 });
+        ball(b, 0.35 + i * 0.6, 1.45, 0.5, 0.16, 0.14, 0.16, '#f5c518', { metal: 0.8, rough: 0.25 });
+      }
+      box(b, 0.3, 0.65, 0.5, 0.6, 0.45, 0.04, '#ffffff'); // "employee of the month" photo
+      box(b, 0.36, 0.71, 0.53, 0.48, 0.33, 0.01, '#9fd3c7');
       break;
     default:
       box(b, 0.05, 0, 0.05, w - 0.1, 0.8, h - 0.1, WOOD);

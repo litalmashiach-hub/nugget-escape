@@ -30,9 +30,25 @@ export class Hud {
   private mini = $<HTMLCanvasElement>('minimap');
   private miniCtx = this.mini.getContext('2d')!;
 
+  private ringFor = '';
+
   constructor() {
+    this.setKeys(KEY_ORDER);
+    (document.querySelector('.feast-icon') as HTMLElement).style.backgroundImage = `url(${nuggetIconURL(48)})`;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.mini.width = 200 * dpr;
+    this.mini.height = 140 * dpr;
+  }
+
+  /** One slot per key this level uses, in the order they are needed. */
+  setKeys(order: readonly KeyColor[]) {
+    const id = order.join();
+    if (id === this.ringFor) return;
+    this.ringFor = id;
     const ring = $('hud-keys');
-    for (const color of KEY_ORDER) {
+    ring.innerHTML = '';
+    this.slots.clear();
+    for (const color of order) {
       const el = document.createElement('div');
       el.className = 'key-slot';
       el.style.setProperty('--slot', KEY_INFO[color].hex);
@@ -41,10 +57,6 @@ export class Hud {
       ring.appendChild(el);
       this.slots.set(color, el);
     }
-    (document.querySelector('.feast-icon') as HTMLElement).style.backgroundImage = `url(${nuggetIconURL(48)})`;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    this.mini.width = 200 * dpr;
-    this.mini.height = 140 * dpr;
   }
 
   reset() {
@@ -58,7 +70,8 @@ export class Hud {
   }
 
   popKey(color: KeyColor) {
-    const el = this.slots.get(color)!;
+    const el = this.slots.get(color);
+    if (!el) return;
     el.classList.add('pop');
     setTimeout(() => el.classList.remove('pop'), 350);
   }
@@ -94,8 +107,8 @@ export class Hud {
       this.lastRoom = room;
       $('hud-room').textContent = room;
     }
-    for (const color of KEY_ORDER) {
-      const el = this.slots.get(color)!;
+    this.setKeys(state.level.keyOrder);
+    for (const [color, el] of this.slots) {
       el.classList.toggle('held', state.held.has(color));
       el.classList.toggle('used', state.unlocked.has(color));
     }

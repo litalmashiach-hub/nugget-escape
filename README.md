@@ -8,6 +8,16 @@ It opens with a short cutscene: the family is at dinner, Dad lifts the nugget to
 
 Out the front door, a second cutscene: **Uncle Gus** jumps in front of you, munching a bucket of fried chicken, and wants you for dessert. The nugget pulls out a **ketchup bottle** and the boss fight begins. Squirt ketchup at Gus: it shoots the way the nugget is facing (a red dashed line shows where), so turn toward him first. Dodge his flying drumsticks, and get out of the red ring when he jumps for a belly slam. The bottle holds 8 squirts. When it is empty, a fresh ketchup bottle appears in the garden every 5 seconds: run over and grab it to fill up.
 
+## Level 2: The Grocery Store
+
+Beat Level 1 and **Level 2** unlocks. It starts by itself a few seconds after the Level 1 win screen (or press **Play Level 2**), and from then on you can pick it on the title screen. The unlock is remembered on that device.
+
+It opens with a street cutscene: the free nugget wanders down the street wondering *why am I alive?*, spots the **FreshMart** grocery store and decides the answer must be inside. In the store:
+
+- The staff (Kevin the cashier, Brenda the stocker, Deli Dan, Priya the clerk and Stan in the stockroom) want to put the nugget back on the shelf so they can win Employee of the Month. If one catches you, you lose a life and end up back on the frozen food shelf.
+- The tall aisle shelves block their view. Hide under the fruit stands, the bakery table, pallets and shopping carts.
+- Key chain: Green (by the deli) → Cold Room → Orange → Stockroom → Gold → **Manager's Office**. Walk into the office to win.
+
 ## Play on a phone
 
 The game works on iPhone and Android in portrait or landscape, with a joystick and big buttons. Open the link in Safari or Chrome. For full screen, tap the full screen button (Android), or use **Share → Add to Home Screen** (iPhone) to get a Nugget Escape icon that opens without the browser bars.
@@ -70,7 +80,7 @@ npm run build        # production build in dist/
 npm run build:single # one self-contained HTML file in dist-single/
 ```
 
-Handy URL options for testing: `?autostart` (skips the cutscene), `?cutscene` (plays it right away), `?difficulty=easy|normal|hard`, `?nofamily`, `?noboss` (win at the front door), `?bot` (autopilot), `?speed=4`, `?seed=1` (repeatable family wandering and bottle spots), `?lowfx` / `?hifx` (force render quality).
+Handy URL options for testing: `?level=2` (pick Level 2 even if it is still locked), `?autostart` (skips the cutscene), `?cutscene` (plays it right away), `?difficulty=easy|normal|hard`, `?nofamily`, `?noboss` (win at the front door), `?bot` (autopilot), `?speed=4`, `?seed=1` (repeatable family wandering and bottle spots), `?lowfx` / `?hifx` (force render quality).
 
 ## Deploying
 

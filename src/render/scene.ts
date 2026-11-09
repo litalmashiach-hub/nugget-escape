@@ -9,13 +9,16 @@ import { SecretFx, FoodFx, SECRET_COLORS } from './secrets';
 import { NuggetModel, PersonModel, BossModel, drumstick, ketchupBottle, makeFamily, type FamilyModel } from './characters';
 import { Cutscene, BossCutscene, CAM_OFFSET } from './cutscene';
 import { bakeBubble, drawSymbol, makeCanvas } from './paint';
-import { START } from '../game/levels';
+import { LEVEL1, type LevelId } from '../game/levels';
+import { StreetCutscene } from './street';
+
+const START = LEVEL1.start as Required<typeof LEVEL1.start>;
 import { INTRO_TIME, type Chaser, type GameEvent, type GameState } from '../game/state';
 import { castRay } from '../game/vision';
 import { ARENA, SLAM_RADIUS } from '../game/boss';
 import { KEY_INFO, type KeyColor } from '../game/types';
 
-export type View = 'game' | 'menu' | 'cutscene' | 'bossIntro';
+export type View = 'game' | 'menu' | 'cutscene' | 'bossIntro' | 'street';
 
 export interface SceneOptions {
   /** Cheaper rendering for slow or software GPUs: no shadows, no lamp lights. */
@@ -146,6 +149,7 @@ export class Scene {
   readonly camera = new THREE.PerspectiveCamera(40, 1, 0.1, 120);
   readonly cutscene = new Cutscene();
   readonly bossCut = new BossCutscene();
+  readonly street = new StreetCutscene();
   private secretFx = new SecretFx();
   private foodFx = new FoodFx();
   private gus = new BossModel();
@@ -158,8 +162,9 @@ export class Scene {
   private aimLine: THREE.Mesh;
   readonly opts: SceneOptions;
   private host: HTMLElement;
-  private floors = new Map<number, FloorView>();
-  private shownFloor = -1;
+  /** Built floors per level: level id -> floor id -> view. */
+  private levels = new Map<LevelId, Map<number, FloorView>>();
+  private shownFloor = '';
   private nugget = new NuggetModel();
   private plate = new THREE.Group();
   private chasers = new Map<string, ChaserView>();
@@ -212,7 +217,7 @@ export class Scene {
     }
 
     for (const k of ['!', '?', 'yum'] as const) this.bubbleTex[k] = canvasTexture(bakeBubble(k));
-    this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.gus.root, this.secretFx.group, this.foodFx.group);
+    this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.street.group, this.gus.root, this.secretFx.group, this.foodFx.group);
     this.gus.root.visible = false;
     const blobMat = new THREE.MeshStandardMaterial({ color: '#e0201c', roughness: 0.25, emissive: '#7a0a08', emissiveIntensity: 0.5 });
     for (let i = 0; i < 24; i++) {
@@ -279,17 +284,27 @@ export class Scene {
 
   /** Build every floor up-front (call during the loading screen). */
   prepare(state: GameState) {
+    const lv = state.level;
+    let floors = this.levels.get(lv.id);
+    if (!floors) this.levels.set(lv.id, (floors = new Map()));
+    let built = false;
     for (const m of state.maps) {
-      if (this.floors.has(m.def.id)) continue;
-      const v = buildFloor(m);
+      if (floors.has(m.def.id)) continue;
+      const v = buildFloor(m, lv.outside);
       v.group.visible = false;
-      if (m.def.id === START.floor) v.group.add(this.plate);
-      this.floors.set(m.def.id, v);
+      if (lv.start.plate && m.def.id === lv.start.floor) v.group.add(this.plate);
+      floors.set(m.def.id, v);
       this.scene.add(v.group);
+      built = true;
     }
+    if (!built) return;
     // compile shaders now rather than on the first frame of play
-    this.showFloor(START.floor);
+    this.showFloor(lv.id, lv.start.floor);
     this.renderer.compile(this.scene, this.camera);
+  }
+
+  private floorView(level: LevelId, floor: number) {
+    return this.levels.get(level)?.get(floor);
   }
 
   /** Clear per-game objects so a new game starts clean. */
@@ -302,7 +317,7 @@ export class Scene {
     for (const k of this.keys.values()) this.scene.remove(k.root);
     this.keys.clear();
     this.particles.clear();
-    for (const v of this.floors.values()) for (const d of v.doors) { d.amount = 0; d.hinge.rotation.y = 0; }
+    for (const fl of this.levels.values()) for (const v of fl.values()) for (const d of v.doors) { d.amount = 0; d.hinge.rotation.y = 0; }
     this.shake = 0;
     this.wonTime = 0;
     this.gus.fallen = 0;
@@ -314,14 +329,15 @@ export class Scene {
     this.camReady = false;
   }
 
-  private showFloor(floor: number) {
-    if (floor === this.shownFloor) return;
-    this.shownFloor = floor;
-    for (const [id, v] of this.floors) v.group.visible = id === floor;
-    const v = this.floors.get(floor);
-    if (!v) return;
-    const spots: [number, number][] = [...v.lights];
-    if (floor === 0) {
+  /** Show one floor of one level (or nothing, for the street cutscene). */
+  private showFloor(level: LevelId | 0, floor: number) {
+    const key = `${level}:${floor}`;
+    if (key === this.shownFloor) return;
+    this.shownFloor = key;
+    for (const [lid, fl] of this.levels) for (const [id, v] of fl) v.group.visible = lid === level && id === floor;
+    const v = level ? this.floorView(level, floor) : undefined;
+    const spots: [number, number][] = v ? [...v.lights] : [];
+    if (v && level === 1 && floor === 0) {
       const gold = v.doors.find((d) => d.color === 'gold');
       if (gold) spots.push([gold.x, gold.y + 1.2]);
     }
@@ -468,11 +484,15 @@ export class Scene {
     this.ensureEntities(state);
     const p = state.player;
     const bossIntro = view === 'bossIntro';
-    const story = view === 'cutscene' || view === 'menu';
-    this.showFloor(story ? START.floor : p.floor);
-    const fv = this.floors.get(story ? START.floor : p.floor)!;
+    const street = view === 'street';
+    const story = view === 'cutscene' || view === 'menu' || street;
+    if (street) this.showFloor(0, 0);
+    else if (story) this.showFloor(1, START.floor);
+    else this.showFloor(state.level.id, p.floor);
+    const fv = this.floorView(story ? 1 : state.level.id, story ? START.floor : p.floor)!;
 
-    this.cutscene.group.visible = story;
+    this.cutscene.group.visible = story && !street;
+    this.street.group.visible = street;
     this.nugget.root.visible = !story;
     this.gus.root.visible = !story && !!state.boss && p.floor === 0;
     this.plate.visible = true;
@@ -502,7 +522,8 @@ export class Scene {
       if (Math.random() < dt * 4) this.particles.emit(k.x + (Math.random() - 0.5) * 0.5, 0.4 + Math.random() * 0.4, k.y + (Math.random() - 0.5) * 0.5, { vy: 0.5, life: 0.8, size: 0.04, color: KEY_INFO[k.color].hex });
     }
 
-    if (story) this.renderStory(dt, view);
+    if (street) this.renderStreet(dt);
+    else if (story) this.renderStory(dt, view);
     else if (bossIntro) this.renderBossIntro(state, dt);
     else this.renderGame(state, dt, fv);
     this.foodFx.group.visible = !story && !bossIntro;
@@ -516,11 +537,22 @@ export class Scene {
     this.particles.update(dt);
 
     // Shadow-casting moonlight follows the camera focus
-    const focus = story ? new THREE.Vector3(17, 0, 4.5) : bossIntro ? new THREE.Vector3(15, 0, 24.5) : this.camTarget;
+    const focus = street ? this.street.focus : story ? new THREE.Vector3(17, 0, 4.5) : bossIntro ? new THREE.Vector3(15, 0, 24.5) : this.camTarget;
     this.sun.position.set(focus.x - 7, 16, focus.z + 9);
     this.sun.target.position.copy(focus);
 
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private renderStreet(dt: number) {
+    for (const c of this.chasers.values()) { c.model.root.visible = false; c.bubble.visible = false; c.cone.visible = false; }
+    this.street.update(dt, this.camera, this.time);
+    if (this.camera.aspect < 0.8) {
+      const dir = this.camera.getWorldDirection(new THREE.Vector3());
+      this.camera.position.addScaledVector(dir, -2.5);
+    }
+    this.camReady = false;
+    this.setDanger(0, dt);
   }
 
   private renderStory(dt: number, view: View) {
@@ -619,30 +651,38 @@ export class Scene {
     // ------------------------------------------------ nugget
     const n = this.nugget;
     let nx = p.pos.x, nz = p.pos.y, ny = 0;
-    if (state.status === 'intro') {
+    const st = state.level.start;
+    if (state.status === 'intro' && !st.plate) {
+      // walks in through the sliding doors
+      const t = 1 - Math.max(0, state.statusTimer) / INTRO_TIME;
+      nz = st.y + 1.6 * (1 - t);
+      p.walkPhase += dt * 12;
+    } else if (state.status === 'intro') {
       const t = 1 - Math.max(0, state.statusTimer) / INTRO_TIME;
       const e = t < 0.3 ? 0 : (t - 0.3) / 0.7;
       nx = START.plate.x + (START.x - START.plate.x) * e;
       nz = START.plate.y + (START.y - START.plate.y) * e;
       ny = 0.9 * (1 - e) + Math.sin(Math.min(1, e) * Math.PI) * 0.7;
     }
+    // after the boss fight, or in the Manager's Office, the nugget hops for joy
     const afterBoss = !!state.boss;
+    const hopForJoy = afterBoss || state.level.goal !== 'frontDoor';
     if (state.status === 'won') {
       this.wonTime += dt;
       // without a boss the nugget runs off down the garden path; after the fight it hops for joy
-      if (afterBoss) ny = Math.abs(Math.sin(this.wonTime * 7)) * 0.35;
+      if (hopForJoy) ny = Math.abs(Math.sin(this.wonTime * 7)) * 0.35;
       else nz += Math.min(this.wonTime, 2.4) * 3;
     } else this.wonTime = 0;
     n.root.position.set(nx, ny, nz);
     const anyChase = state.chasers.some((c) => c.floor === p.floor && (c.mode === 'chase' || c.mode === 'alert'));
     n.mood = anyChase || state.status === 'caught' ? 'scared' : 'happy';
     n.awake = 1;
-    const won = state.status === 'won' && this.wonTime < 2.4 && !afterBoss;
+    const won = state.status === 'won' && this.wonTime < 2.4 && !hopForJoy;
     if (won) p.walkPhase += dt * 14;
     const fighting = state.status === 'boss';
     n.bottleOut = afterBoss ? 1 : 0;
     if (fighting && state.boss!.mode === 'jump') n.mood = 'scared';
-    n.animate(won ? Math.PI / 2 : afterBoss && state.status === 'won' ? Math.PI / 2 : p.facing, (p.moving && (state.status === 'playing' || fighting)) || won, p.walkPhase, dt, p.dashTime > 0);
+    n.animate(won ? Math.PI / 2 : hopForJoy && state.status === 'won' ? Math.PI / 2 : p.facing, (p.moving && (state.status === 'playing' || fighting)) || won, p.walkPhase, dt, p.dashTime > 0);
     if (fighting && state.boss!.mode === 'jump') n.mood = 'scared';
     n.opacity = p.hidden ? 0.5 : 1;
     n.root.visible = !(p.invuln > 0 && (state.status === 'playing' || fighting) && Math.floor(this.time * 12) % 2);
@@ -711,7 +751,7 @@ export class Scene {
       const margin = 4.5;
       if (map.w > margin * 2) target.x = Math.max(margin, Math.min(map.w - margin, target.x));
       target.z = Math.max(2.5, Math.min(map.h - 1, target.z));
-      if (state.status === 'won') target.z = nz;
+      if (state.status === 'won' && !hopForJoy) target.z = nz;
     }
     if (!this.camReady) { this.camTarget.copy(target); this.camReady = true; }
     this.camTarget.lerp(target, Math.min(1, dt * 5));

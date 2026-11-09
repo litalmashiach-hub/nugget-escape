@@ -1,4 +1,4 @@
-import { DOOR_LETTERS, type FloorDef, type KeyColor } from './types';
+import { DOOR_LETTERS, TALL_FURNITURE, type FloorDef, type KeyColor } from './types';
 
 export interface Door {
   x: number;
@@ -19,6 +19,7 @@ export class FloorMap {
   private readonly wall: Uint8Array;
   private readonly solid: Uint8Array;
   private readonly hide: Uint8Array;
+  private readonly tall: Uint8Array;
   private readonly doorAt = new Map<number, Door>();
 
   constructor(def: FloorDef) {
@@ -29,6 +30,7 @@ export class FloorMap {
     this.wall = new Uint8Array(n);
     this.solid = new Uint8Array(n);
     this.hide = new Uint8Array(n);
+    this.tall = new Uint8Array(n);
     this.room = new Int16Array(n).fill(-1);
 
     for (let y = 0; y < this.h; y++) {
@@ -52,6 +54,7 @@ export class FloorMap {
       for (let y = it.y; y < it.y + it.h; y++)
         for (let x = it.x; x < it.x + it.w; x++) {
           if (!this.inBounds(x, y)) continue;
+          if (TALL_FURNITURE.has(it.kind)) this.tall[y * this.w + x] = 1;
           if (it.block === 'solid') this.solid[y * this.w + x] = 1;
           else this.hide[y * this.w + x] = 1;
         }
@@ -116,9 +119,9 @@ export class FloorMap {
     return !this.isHide(x, y) && !this.isStairs(x, y);
   }
 
-  /** Blocks sight: walls and closed doors. */
+  /** Blocks sight: walls, closed doors and tall store shelves. */
   opaque(x: number, y: number, unlocked: ReadonlySet<KeyColor>) {
-    if (this.isWall(x, y)) return true;
+    if (this.isWall(x, y) || this.tall[y * this.w + x] === 1) return true;
     const d = this.door(x, y);
     return !!d && !unlocked.has(d.color);
   }

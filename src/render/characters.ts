@@ -3,7 +3,7 @@
  * Every model faces +z by default; `faceAngle` converts a map facing angle to rotation.y.
  */
 import { THREE, GEO, mat, builder, ball, cyl, cbox, type Builder } from './kit';
-import { rng } from './paint';
+import { rng, shade } from './paint';
 import type { FamilyKind } from '../game/types';
 
 /** Map facing (atan2 of map dy, dx) to a rotation around +y for a model that faces +z. */
@@ -380,7 +380,14 @@ const LOOKS: Record<Exclude<FamilyKind, 'dog'>, Look> = {
   sister: { shirt: '#8e5cc9', pants: '#26262e', skin: '#c68642', hair: '#1d1d1d', scale: 0.92, extra: '#f2679f' },
   grandma: { shirt: '#d9779b', pants: '#6b5b95', skin: '#f3d2b3', hair: '#dcdcdc', scale: 0.93 },
   brother: { shirt: '#f68b2a', pants: '#3a6ea5', skin: '#ffdbac', hair: '#e6be5a', scale: 0.78, extra: '#d63c3c' },
+  // store staff: green FreshMart aprons (extra), name tags
+  cashier: { shirt: '#f2d16b', pants: '#2f3542', skin: '#e0ac69', hair: '#2b1d14', scale: 0.98, extra: '#2e9e5b' },
+  stocker: { shirt: '#5b8bd6', pants: '#3b3b4f', skin: '#c68642', hair: '#1d1d1d', scale: 1.02, extra: '#2e9e5b' },
+  butcher: { shirt: '#ffffff', pants: '#3b3b4f', skin: '#f1c27d', hair: '#8a5a36', scale: 1.08, extra: '#e8e8e8' },
+  clerk: { shirt: '#e86f7a', pants: '#2c3e66', skin: '#8d5524', hair: '#141010', scale: 0.95, extra: '#2e9e5b' },
 };
+
+const STAFF = new Set(['cashier', 'stocker', 'butcher', 'clerk']);
 
 export class PersonModel {
   readonly root = new THREE.Group();
@@ -441,6 +448,14 @@ export class PersonModel {
     // collar
     this.body.add(cbox(b, 0, 1.43, 0.12, 0.16, 0.05, 0.04, '#ffffff'));
     if (kind === 'dad') this.body.add(cbox(b, 0, 1.25, 0.165, 0.06, 0.28, 0.02, '#c0392b')); // tie
+    if (STAFF.has(kind)) {
+      // apron with a pocket, straps and a name tag ("employee of the month" hopefuls)
+      this.body.add(cbox(b, 0, 1.0, 0.17, 0.36, 0.62, 0.03, L.extra!));
+      this.body.add(cbox(b, 0, 0.92, 0.19, 0.16, 0.1, 0.01, shade(L.extra!, -0.2)));
+      for (const sx of [-0.12, 0.12]) this.body.add(cbox(b, sx, 1.36, 0.15, 0.04, 0.14, 0.03, L.extra!));
+      this.body.add(cbox(b, 0.1, 1.28, 0.195, 0.1, 0.05, 0.01, '#ffffff'));
+      this.body.add(cbox(b, 0.1, 1.28, 0.2, 0.08, 0.012, 0.005, '#c0392b'));
+    }
 
     // arms
     this.armL = pivot(this.body, -0.29, 1.4, 0);
@@ -492,6 +507,27 @@ export class PersonModel {
         }
         break;
       }
+      case 'cashier':
+        this.head.add(ball(b, 0, 0.07, -0.02, 0.39, 0.3, 0.39, hair));
+        this.head.add(ball(b, 0, 0.12, 0.02, 0.4, 0.2, 0.4, '#2e9e5b')); // store cap
+        this.head.add(cbox(b, 0, 0.12, 0.2, 0.22, 0.03, 0.16, '#2e9e5b'));
+        break;
+      case 'stocker':
+        this.head.add(ball(b, 0, 0.06, -0.02, 0.38, 0.27, 0.38, hair));
+        this.head.add(cbox(b, 0, -0.1, 0.16, 0.18, 0.08, 0.06, hair)); // beard
+        break;
+      case 'butcher': {
+        this.head.add(ball(b, 0, 0.06, -0.02, 0.38, 0.26, 0.38, hair));
+        const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 0.2, 16), mat('#ffffff', { rough: 0.9 }));
+        hat.position.set(0, 0.2, 0);
+        this.head.add(hat); // paper deli hat
+        this.head.add(cbox(b, 0, -0.045, 0.18, 0.12, 0.03, 0.02, hair)); // mustache
+        break;
+      }
+      case 'clerk':
+        this.head.add(ball(b, 0, 0.08, -0.03, 0.4, 0.3, 0.4, hair));
+        this.head.add(ball(b, 0, 0.08, -0.2, 0.2, 0.2, 0.2, hair)); // puff
+        break;
       case 'brother':
         this.head.add(ball(b, 0, 0.06, -0.02, 0.38, 0.28, 0.38, hair));
         this.head.add(ball(b, 0, 0.1, 0, 0.39, 0.22, 0.39, L.extra!)); // cap

@@ -112,7 +112,8 @@ function stairBlocks(map: FloorMap) {
   return blocks;
 }
 
-export function buildFloor(map: FloorMap): FloorView {
+export function buildFloor(map: FloorMap, outsideKind: 'garden' | 'parking' = 'garden'): FloorView {
+  const house = outsideKind === 'garden';
   const group = new THREE.Group();
   const id = map.def.id;
   const roomOf = (x: number, y: number) => {
@@ -211,7 +212,7 @@ export function buildFloor(map: FloorMap): FloorView {
     holder.add(strip);
     group.add(holder);
     // Swing into the room behind the door (local +z is south for 'h', east for 'v').
-    const behindPlus = d.color === 'gold' ? true
+    const behindPlus = d.color === 'gold' && house ? true
       : d.orient === 'h' ? roomOf(d.x, d.y + 1)?.door === d.color : roomOf(d.x + 1, d.y)?.door === d.color;
     return { color: d.color, x: d.x, y: d.y, hinge, amount: 0, swing: behindPlus ? -1 : 1 };
   });
@@ -270,7 +271,7 @@ export function buildFloor(map: FloorMap): FloorView {
 
   // ---------------------------------------------------------------- outside
   const M = 14;
-  const grass = mat('#ffffff', { map: grassTexture(), rough: 1 });
+  const grass = house ? mat('#ffffff', { map: grassTexture(), rough: 1 }) : mat('#4a4d52', { rough: 0.95 });
   const strips: [number, number, number, number][] = [
     [-M, -M, map.w + 2 * M, M], [-M, map.h, map.w + 2 * M, M], [-M, 0, M, map.h], [map.w, 0, M, map.h],
   ];
@@ -286,7 +287,7 @@ export function buildFloor(map: FloorMap): FloorView {
   }
   const R = rng(id * 101 + 5);
   const yard = builder(false, false);
-  for (let i = 0; i < 26; i++) {
+  for (let i = 0; i < (house ? 26 : 0); i++) {
     const side = i % 4;
     const along = R();
     const out = 1.6 + R() * 6;
@@ -299,7 +300,8 @@ export function buildFloor(map: FloorMap): FloorView {
     cone(yard, x, 0.8 * s, z, 0.9 * s, 1.6 * s, shade('#2f6b3a', (R() - 0.5) * 0.3));
     cone(yard, x, 1.6 * s, z, 0.65 * s, 1.2 * s, shade('#3a7d45', (R() - 0.5) * 0.3));
   }
-  if (id === 0) {
+  if (!house) storefront(yard, map, R);
+  if (house && id === 0) {
     const gold = map.doors.find((d) => d.color === 'gold');
     if (gold) {
       box(yard, gold.x - 0.1, -0.01, map.h, 2.2, 0.03, ARENA.y1 - map.h + 4, '#cdb89a');
@@ -338,4 +340,51 @@ export function buildFloor(map: FloorMap): FloorView {
 
   const lights: [number, number][] = [...map.def.lights];
   return { id, group, doors, hides, lights };
+}
+
+/** Outside the grocery store: a parking lot with cars, lamps, a cart corral and the sliding entrance doors. */
+function storefront(yard: ReturnType<typeof builder>, map: FloorMap, R: () => number) {
+  const W = map.w, H = map.h;
+  const ex = Math.floor(W / 2) - 2; // entrance: 4 tiles in the middle of the bottom wall
+  // sidewalk along the front
+  box(yard, -2, -0.005, H, W + 4, 0.03, 2, '#c9c4b8');
+  // parking stripes
+  for (let x = -1; x < W + 1; x += 2.6) {
+    if (x > ex - 1 && x < ex + 5) continue;
+    box(yard, x, 0.0, H + 2.6, 0.08, 0.02, 3.6, '#f4f1e8');
+  }
+  // crosswalk to the doors
+  for (let i = 0; i < 6; i++) box(yard, ex + 0.2 + i * 0.65, 0.0, H + 2.2, 0.38, 0.02, 4, '#f4f1e8');
+  // parked cars
+  const colors = ['#e8424a', '#3d7df0', '#f5c518', '#ffffff', '#58c13f', '#9b5de5', '#222831'];
+  for (let x = -0.2; x < W; x += 2.6) {
+    if (x > ex - 1.5 && x < ex + 5 || R() < 0.3) continue;
+    const c = colors[Math.floor(R() * colors.length)];
+    const z = H + 3;
+    box(yard, x + 0.45, 0.25, z, 1.7, 0.55, 3.2, c, { rough: 0.35, metal: 0.4 });
+    box(yard, x + 0.6, 0.8, z + 0.7, 1.4, 0.5, 1.7, '#a9d6f5', { rough: 0.05, metal: 0.3 });
+    box(yard, x + 0.6, 1.28, z + 0.7, 1.4, 0.04, 1.7, c, { rough: 0.35, metal: 0.4 });
+    for (const [dx, dz] of [[0.4, 0.5], [2.1, 0.5], [0.4, 2.7], [2.1, 2.7]]) {
+      const w = cyl(yard, x + dx, 0.25, z + dz, 0.25, 0.2, '#1d1d1d');
+      w.rotation.z = Math.PI / 2;
+    }
+  }
+  // street lamps
+  for (const x of [-1.5, W / 4, (3 * W) / 4, W + 1.5]) {
+    cyl(yard, x, 0, H + 7.5, 0.07, 3.2, '#555');
+    box(yard, x - 0.3, 3.2, H + 7.3, 0.6, 0.12, 0.4, '#444');
+    box(yard, x - 0.25, 3.15, H + 7.35, 0.5, 0.05, 0.3, '#fff2c4', { emissive: '#ffdd88', emissiveIntensity: 2 });
+  }
+  // cart corral
+  for (let i = 0; i < 4; i++) box(yard, ex + 6 + i * 0.05, 0.42, H + 1.2 + i * 0.25, 0.8, 0.45, 0.8, '#c9ced6', { metal: 0.6, rough: 0.3 });
+  // sliding glass doors (both faces of the wall) and the FreshMart sign
+  // (outside face only, so nothing stands between the camera and the nugget inside)
+  box(yard, ex, 0, H, 4, 2.2, 0.03, '#bfe6ff', { rough: 0.05, metal: 0.3, emissive: '#4a8bb8', emissiveIntensity: 0.15 });
+  box(yard, ex + 1.98, 0, H - 0.01, 0.04, 2.2, 0.05, '#9aa3ad', { metal: 0.6 });
+  box(yard, ex - 1, 2.25, H + 0.02, 6, 0.7, 0.1, '#2e9e5b', { emissive: '#2e9e5b', emissiveIntensity: 0.3 });
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(5.4, 0.62), new THREE.MeshBasicMaterial({ map: labelTexture('FreshMart', '#ffffff'), transparent: true }));
+  sign.position.set(ex + 2, 2.6, H + 0.13);
+  yard.group.add(sign);
+  // welcome mat inside
+  box(yard, ex + 0.3, 0.005, H - 2.4, 3.4, 0.02, 1.2, '#2e9e5b', { rough: 1 });
 }

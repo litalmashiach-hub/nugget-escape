@@ -1,11 +1,11 @@
 import { SECRETS, touchingSecret, closestPoint, FEAST_TIME, FEAST_RECHARGE, type SecretId } from './secrets';
-import { FLOORS, START } from './levels';
+import { LEVELS, type LevelDef, type LevelId } from './levels';
 import { buildMaps, type FloorMap } from './map';
 import { findPath } from './path';
 import { canSee, angleDiff } from './vision';
 import { makeBoss, updateBossFight, ENTRY, BOSS_NAME, type Boss, type Shot, type Bottle } from './boss';
 import {
-  DIFFICULTY, KEY_INFO, KEY_ORDER,
+  DIFFICULTY, KEY_INFO,
   type Difficulty, type DifficultySettings, type FamilyDef, type FloorDef, type KeyColor, type Vec,
 } from './types';
 
@@ -120,6 +120,8 @@ export interface GameOptions {
   /** Start playing at once (the opening cutscene already showed the nugget hopping off the plate). */
   skipIntro?: boolean;
   floors?: FloorDef[];
+  /** Which level to play (default 1, the house). */
+  level?: LevelId;
   /** Fixes the family's random wandering (for tests and replays). */
   seed?: number;
 }
@@ -137,6 +139,7 @@ export function makeRandom(seed: number) {
 }
 
 export interface GameState {
+  level: LevelDef;
   maps: FloorMap[];
   /** Random numbers for the family's wandering. */
   rand: () => number;
@@ -196,10 +199,13 @@ const makeChaser = (def: FamilyDef, floor: number): Chaser => ({
 });
 
 export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions = {}): GameState {
-  const floors = opts.floors ?? FLOORS;
+  const level = LEVELS[opts.level ?? 1];
+  const floors = opts.floors ?? level.floors;
+  const START = level.start;
   const maps = buildMaps(floors);
   const settings = DIFFICULTY[difficulty];
   return {
+    level,
     maps,
     difficulty,
     settings,
@@ -337,9 +343,24 @@ export interface Objective {
   hint: string;
 }
 
+/** The room the nugget must reach to win, when the level has one (Level 2). */
+export function goalRoom(state: GameState) {
+  const g = state.level.goal;
+  if (g === 'frontDoor') return null;
+  for (const m of state.maps) {
+    const room = m.def.rooms.find((r) => r.id === g);
+    if (room) return { floor: m.def.id, room };
+  }
+  return null;
+}
+
 export function currentObjective(state: GameState): Objective | null {
-  for (const color of KEY_ORDER) {
+  const goal = goalRoom(state);
+  for (const color of state.level.keyOrder) {
     if (state.unlocked.has(color)) {
+      if (color === 'gold' && goal) {
+        return { color, action: 'escape', text: `Get into the ${goal.room.name}!`, hint: `The door is open. Run into the ${goal.room.name}!` };
+      }
       if (color === 'gold') {
         if (state.boss) return { color, action: 'boss', text: `Squirt ketchup at ${BOSS_NAME}!`, hint: `Face ${BOSS_NAME} and squirt: the ketchup goes the way you are facing. Dodge the drumsticks, stay out of the red ring, and when the bottle is empty grab the new one that appears.` };
         return { color, action: 'escape', text: 'Run out the front door!', hint: 'The front door is open. Run outside to freedom!' };
@@ -356,6 +377,7 @@ export function currentObjective(state: GameState): Objective | null {
         hint: `The ${label} key is in the ${roomNameOf(state, k.floor, k.x, k.y)} (${state.maps[k.floor].def.name}).`,
       };
     }
+    if (color === 'gold' && goal) return { color, action: 'open', text: `Open the ${goal.room.name}!`, hint: `The Gold door leads to the ${goal.room.name}.` };
     if (color === 'gold') return { color, action: 'open', text: 'Open the Gold front door!', hint: 'The front door is at the bottom of the Front Hall (Ground Floor).' };
     const dr = doorRoom(state, color)!;
     return {
@@ -405,7 +427,7 @@ export function update(state: GameState, input: Input, dt: number) {
 
 /** True once every easter egg is found and the nugget rain is charged. */
 export function canFeast(state: GameState) {
-  return state.secrets.size === SECRETS.length && state.feastCd <= 0 && state.feastTime <= 0
+  return state.level.secrets && state.secrets.size === SECRETS.length && state.feastCd <= 0 && state.feastTime <= 0
     && (state.status === 'playing' || state.status === 'caught');
 }
 
@@ -493,8 +515,10 @@ function updateFeaster(state: GameState, c: Chaser, dt: number) {
 
 function respawn(state: GameState) {
   const p = state.player;
-  p.floor = state.checkpoint.floor;
-  p.pos = { x: state.checkpoint.x, y: state.checkpoint.y };
+  // In the store the staff put the nugget back on the frozen food shelf.
+  const back = state.level.shelf ?? state.checkpoint;
+  p.floor = back.floor;
+  p.pos = { x: back.x, y: back.y };
   p.invuln = INVULN_TIME;
   p.dashTime = 0;
   for (const c of state.chasers) if (c.floor === p.floor) Object.assign(c, makeChaser(c.def, c.floor));
@@ -557,7 +581,7 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
   }
 
   // Easter eggs
-  for (const sd of SECRETS) {
+  if (state.level.secrets) for (const sd of SECRETS) {
     if (state.secrets.has(sd.id) || !touchingSecret(sd, p.floor, p.pos, PLAYER_RADIUS)) continue;
     state.secrets.add(sd.id);
     const c = closestPoint(sd, p.pos);
@@ -577,9 +601,18 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
   const tx = Math.floor(p.pos.x), ty = Math.floor(p.pos.y);
   p.hidden = map.isHide(tx, ty);
 
+  // Level 2: made it into the Manager's Office
+  const goal = goalRoom(state);
+  if (goal && p.floor === goal.floor && map.roomAt(p.pos.x, p.pos.y)?.id === goal.room.id) {
+    state.status = 'won';
+    p.moving = false;
+    state.events.push({ type: 'win' });
+    return;
+  }
+
   // Escape through the front door
   const door = map.door(tx, ty);
-  if (door && door.color === 'gold' && state.unlocked.has('gold') && p.pos.y > ty + 0.45) {
+  if (!goal && door && door.color === 'gold' && state.unlocked.has('gold') && p.pos.y > ty + 0.45) {
     if (state.noBoss) {
       state.status = 'won';
       state.events.push({ type: 'win' });

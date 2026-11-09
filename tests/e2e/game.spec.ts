@@ -210,6 +210,74 @@ test('the robot player escapes the whole house and sees the win screen', async (
   expect(errors).toEqual([]);
 });
 
+test('Level 2 is locked on a fresh device, and beating Level 1 unlocks it and starts it on its own', async ({ page }) => {
+  test.setTimeout(240_000);
+  const errors = await open(page);
+  await expect(page.locator('#level-2')).toBeDisabled();
+  await expect(page.locator('#level-2')).toContainText('Beat Level 1 to unlock');
+  // the robot beats Level 1 (quick version: no family, no boss)
+  await page.goto('/?autostart&nofamily&noboss&bot&speed=12&seed=1');
+  await page.waitForFunction(() => (window as any).__nugget?.mode !== undefined);
+  await expect(page.locator('#screen-win')).toBeVisible({ timeout: 200_000 });
+  await expect(page.locator('#win-sub')).toHaveText('Level 2 unlocked: The Grocery Store!');
+  await expect(page.locator('#btn-next')).toBeVisible();
+  await expect(page.locator('#win-next-note')).toContainText('Level 2 starts in');
+  // ...and Level 2's street cutscene starts by itself
+  await expect.poll(() => page.evaluate(() => (window as any).__nugget.mode), { timeout: 15_000 }).toBe('street');
+  expect(await page.evaluate(() => (window as any).__nugget.state.level.id)).toBe(2);
+  // the unlock is remembered for the menu
+  await page.evaluate(() => (window as any).__nugget.toMenu());
+  await expect(page.locator('#level-2')).toBeEnabled();
+  expect(errors).toEqual([]);
+});
+
+test('Level 2 opens with the street cutscene, which can be skipped into the grocery store', async ({ page }) => {
+  const errors = await open(page, '?level=2');
+  await expect(page.locator('#level-2')).toHaveClass(/on/);
+  await page.locator('#btn-play').click();
+  await expect(page.locator('#cutscene')).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__nugget.mode)).toBe('street');
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(4));
+  await expect(page.locator('#cutscene-text')).toContainText('why am I alive');
+  await page.locator('#btn-skip').click();
+  await expect(page.locator('#hud')).toBeVisible();
+  await expect(page.locator('.key-slot')).toHaveCount(3);
+  await expect(page.locator('#hud-floor')).toHaveText('FreshMart');
+  await expect(page.locator('#hud-objective .obj-text')).toHaveText('Find the Green key');
+  await expect(page.locator('#feast-btn')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('Level 2: a store employee puts the nugget back on the shelf', async ({ page }) => {
+  const errors = await open(page, '?level=2&autostart&seed=1');
+  await page.waitForFunction(() => (window as any).__nugget.state.status === 'playing');
+  await page.evaluate(() => {
+    const s = (window as any).__nugget.state;
+    s.chasers = s.chasers.filter((c: any) => c.def.id === 'dan');
+    const dan = s.chasers[0];
+    dan.pos = { x: 26.5, y: 19.5 }; dan.facing = 0; dan.lookBase = 0; dan.pause = 5;
+    s.player.pos = { x: 29, y: 21.5 };
+  });
+  await expect(page.locator('.toast.danger').filter({ hasText: 'put you back on the shelf' })).toBeVisible({ timeout: 8000 });
+  // after the caught moment, it reappears on the frozen food shelf with one life fewer
+  await expect.poll(async () => { const s = await snap(page); return `${s.lives} ${s.status}`; }, { timeout: 8000 }).toBe('2 playing');
+  const s = await snap(page);
+  expect(Math.abs(s.x - 27.5) + Math.abs(s.y - 15.6)).toBeLessThan(1.5);
+  expect(errors).toEqual([]);
+});
+
+test('the robot player gets through the grocery store into the Manager\'s Office', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await open(page, '?level=2&autostart&nofamily&bot&speed=12&seed=1');
+  await expect.poll(async () => (await snap(page)).status, { timeout: 90_000, intervals: [250] }).toBe('won');
+  await expect(page.locator('#screen-win')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('#win-title')).toHaveText("You made it to the Manager's Office!");
+  await expect(page.locator('.key-slot.used')).toHaveCount(3);
+  await expect(page.locator('#btn-next')).toBeHidden();
+  await expect(page.locator('#win-secrets-box')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
 test('phone: touch controls appear and nothing overflows @phone', async ({ page }) => {
   await open(page);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);

@@ -31,7 +31,7 @@ export interface Vec {
   y: number;
 }
 
-export type FloorStyle = 'wood' | 'parquet' | 'checker' | 'bathTile' | 'carpetBlue' | 'carpetRose' | 'attic' | 'living';
+export type FloorStyle = 'wood' | 'parquet' | 'checker' | 'bathTile' | 'carpetBlue' | 'carpetRose' | 'attic' | 'living' | 'storeTile' | 'concrete' | 'officeCarpet';
 
 export type FurnitureKind =
   | 'counter' | 'fridge' | 'island' | 'kitchenTable' | 'diningTable' | 'sideboard' | 'cabinet' | 'plant'
@@ -39,7 +39,12 @@ export type FurnitureKind =
   | 'coffeeTable' | 'fireplace' | 'dogBed' | 'bed' | 'bigBed' | 'toyChest' | 'desk' | 'beanbag'
   | 'bathtub' | 'toilet' | 'sink' | 'towelCabinet' | 'bathMat' | 'laundry' | 'wardrobe'
   | 'nightstand' | 'dresser' | 'rocker' | 'boxes' | 'trunk' | 'coveredSofa' | 'mannequin'
-  | 'teepee' | 'toyBox' | 'rockingHorse' | 'roundTable' | 'gameTable' | 'runner';
+  | 'teepee' | 'toyBox' | 'rockingHorse' | 'roundTable' | 'gameTable' | 'runner'
+  // grocery store (Level 2)
+  | 'shelf' | 'freezer' | 'produce' | 'checkout' | 'deli' | 'cart' | 'rack' | 'pallet' | 'bakery' | 'officeDesk' | 'trophyCase';
+
+/** Furniture tall enough to block sight (store shelves and racks). */
+export const TALL_FURNITURE: ReadonlySet<FurnitureKind> = new Set<FurnitureKind>(['shelf', 'rack']);
 
 /**
  * solid: blocks everyone.
@@ -68,7 +73,9 @@ export interface RoomDef {
   door?: KeyColor;
 }
 
-export type FamilyKind = 'dad' | 'mom' | 'sister' | 'grandma' | 'brother' | 'dog';
+export type FamilyKind = 'dad' | 'mom' | 'sister' | 'grandma' | 'brother' | 'dog'
+  // grocery store employees (Level 2)
+  | 'cashier' | 'stocker' | 'butcher' | 'clerk';
 
 export interface FamilyDef {
   id: string;

@@ -179,6 +179,9 @@ const FLOOR_BASE: Record<FloorStyle, string> = {
   carpetBlue: '#7d9ad6',
   carpetRose: '#cf9aae',
   attic: '#8f6c4b',
+  storeTile: '#f4f1ea',
+  concrete: '#a9aeb2',
+  officeCarpet: '#6f7f9e',
 };
 
 /** Repeating floor texture covering 2x2 tiles. */
@@ -244,6 +247,28 @@ export function floorTexture(style: FloorStyle): THREE.Texture {
       ctx.beginPath(); ctx.moveTo(i * s, 0); ctx.lineTo(i * s, S); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, i * s); ctx.lineTo(S, i * s); ctx.stroke();
     }
+  } else if (style === 'storeTile') {
+    // big shiny supermarket tiles with the odd colored one
+    const s = S / 4;
+    for (let y = 0; y < 4; y++)
+      for (let x = 0; x < 4; x++) {
+        ctx.fillStyle = (x * 3 + y * 5) % 7 === 0 ? '#cfe3d4' : shade(base, (R() - 0.5) * 0.05);
+        ctx.fillRect(x * s, y * s, s, s);
+      }
+    ctx.strokeStyle = 'rgba(120,110,95,0.35)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i <= 4; i++) {
+      ctx.beginPath(); ctx.moveTo(i * s, 0); ctx.lineTo(i * s, S); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * s); ctx.lineTo(S, i * s); ctx.stroke();
+    }
+  } else if (style === 'concrete') {
+    for (let i = 0; i < 2200; i++) {
+      ctx.fillStyle = shade(base, (R() - 0.5) * 0.18);
+      ctx.fillRect(R() * S, R() * S, 2 + R() * 3, 2 + R() * 3);
+    }
+    ctx.fillStyle = 'rgba(60,60,60,0.25)';
+    ctx.fillRect(0, 0, S, 2);
+    ctx.fillRect(0, 0, 2, S);
   } else {
     // carpets: soft speckle
     for (let i = 0; i < 2600; i++) {
