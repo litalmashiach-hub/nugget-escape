@@ -491,7 +491,17 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
   const len = Math.hypot(mx, my);
   if (len > 1) { mx /= len; my /= len; }
   p.moving = len > 0.1;
-  if (!p.stairsArmed && (!p.moving || mx * p.arriveDir.x + my * p.arriveDir.y < 0.7)) p.stairsArmed = true;
+  if (!p.stairsArmed) {
+    if (!p.moving || mx * p.arriveDir.x + my * p.arriveDir.y < 0.7) p.stairsArmed = true;
+    else {
+      // Just came off the stairs, turned around to face the room. Still holding the
+      // direction we climbed in would walk straight back onto the stairs, so wait
+      // until the player lets go or picks a new direction.
+      mx = 0;
+      my = 0;
+      p.moving = false;
+    }
+  }
 
   if (input.dash && p.dashCd <= 0 && p.moving) {
     p.dashTime = DASH_TIME;
@@ -581,10 +591,21 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
       p.invuln = Math.max(p.invuln, 0.8);
       p.stairsArmed = false;
       p.arriveDir = { x: mx, y: my };
+      p.facing = awayFromStairs(state.maps[to], p.pos) ?? p.facing + Math.PI;
       state.checkpoint = { floor: to, x: p.pos.x, y: p.pos.y };
       state.events.push({ type: 'floor', floor: to });
     }
   }
+}
+
+/** Facing angle pointing from the nearby stairs toward `pos`: into the room. */
+function awayFromStairs(map: FloorMap, pos: Vec): number | null {
+  let sx = 0, sy = 0, n = 0;
+  for (let y = Math.floor(pos.y) - 3; y <= Math.floor(pos.y) + 3; y++)
+    for (let x = Math.floor(pos.x) - 3; x <= Math.floor(pos.x) + 3; x++)
+      if (map.isStairs(x, y)) { sx += x + 0.5; sy += y + 0.5; n++; }
+  if (!n) return null;
+  return Math.atan2(pos.y - sy / n, pos.x - sx / n);
 }
 
 function pathTo(state: GameState, c: Chaser, target: Vec): Vec[] | null {

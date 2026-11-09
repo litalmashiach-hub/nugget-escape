@@ -134,6 +134,26 @@ describe('stairs', () => {
   });
 });
 
+describe('arriving on a new floor', () => {
+  it('the nugget turns around to face away from the stairs and does not walk straight back onto them', () => {
+    const s = createGame('normal', { noFamily: true });
+    skipIntro(s);
+    s.unlocked.add('red');
+    s.player.pos = { x: 3.5, y: 14.5 };
+    run(s, 1, () => ({ mx: -1, my: 0, dash: false })); // walk west up the stairs
+    expect(s.player.floor).toBe(1);
+    // the stairs down are to the west, so the nugget now looks east into the hall
+    expect(Math.cos(s.player.facing)).toBeGreaterThan(0.7);
+    const x0 = s.player.pos.x;
+    run(s, 1, () => ({ mx: -1, my: 0, dash: false })); // still holding west
+    expect(s.player.floor).toBe(1);
+    expect(s.player.pos.x).toBeCloseTo(x0, 5);
+    run(s, 0.5, () => ({ mx: 1, my: 0, dash: false })); // walk on into the hall
+    expect(s.player.pos.x).toBeGreaterThan(x0 + 0.5);
+    expect(s.player.floor).toBe(1);
+  });
+});
+
 describe('family members', () => {
   function withOnlyDad() {
     const s = createGame('normal');
