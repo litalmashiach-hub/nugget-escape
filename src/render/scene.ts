@@ -6,7 +6,7 @@
 import { THREE, cutUniforms, canvasTexture, glowTexture, GEO } from './kit';
 import { buildFloor, type FloorView } from './world';
 import { SecretFx, FoodFx, SECRET_COLORS } from './secrets';
-import { NuggetModel, PersonModel, BossModel, drumstick, makeFamily, type FamilyModel } from './characters';
+import { NuggetModel, PersonModel, BossModel, drumstick, ketchupBottle, makeFamily, type FamilyModel } from './characters';
 import { Cutscene, BossCutscene, CAM_OFFSET } from './cutscene';
 import { bakeBubble, drawSymbol, makeCanvas } from './paint';
 import { START } from '../game/levels';
@@ -152,6 +152,10 @@ export class Scene {
   private ketchupBlobs: THREE.Mesh[] = [];
   private flyingSticks: THREE.Group[] = [];
   private slamRing: THREE.Mesh;
+  /** Ketchup bottles to grab when the nugget's bottle is empty. */
+  private pickups: { root: THREE.Group; bottle: THREE.Group; glow: THREE.Sprite }[] = [];
+  /** Shows where the next squirt will go. */
+  private aimLine: THREE.Mesh;
   readonly opts: SceneOptions;
   private host: HTMLElement;
   private floors = new Map<number, FloorView>();
@@ -232,6 +236,34 @@ export class Scene {
     this.slamRing.renderOrder = 3;
     this.slamRing.visible = false;
     this.scene.add(this.slamRing);
+
+    for (let i = 0; i < 3; i++) {
+      const root = new THREE.Group();
+      const bottle = ketchupBottle();
+      bottle.scale.setScalar(2);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow, color: '#ff5a4a', transparent: true, depthWrite: false, toneMapped: false }));
+      glow.scale.set(1.6, 1.6, 1);
+      glow.position.y = 0.45;
+      root.add(bottle, glow);
+      root.visible = false;
+      this.pickups.push({ root, bottle, glow });
+      this.scene.add(root);
+    }
+    // a row of fading dashes in front of the nugget: the squirt goes this way
+    const dash = document.createElement('canvas');
+    dash.width = 256; dash.height = 16;
+    const dctx = dash.getContext('2d')!;
+    for (let i = 0; i < 8; i++) {
+      dctx.fillStyle = `rgba(255,60,50,${1 - i * 0.09})`;
+      dctx.fillRect(i * 32 + 4, 2, 20, 12);
+    }
+    const aimTex = canvasTexture(dash);
+    this.aimLine = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.24), new THREE.MeshBasicMaterial({ map: aimTex, transparent: true, depthWrite: false, toneMapped: false }));
+    this.aimLine.geometry.translate(1.5 + 0.35, 0, 0);
+    this.aimLine.rotation.x = -Math.PI / 2;
+    this.aimLine.renderOrder = 3;
+    this.aimLine.visible = false;
+    this.scene.add(this.aimLine);
 
     // Dad's plate on the dining table: where the nugget starts.
     const plateMesh = new THREE.Mesh(GEO.cyl, new THREE.MeshStandardMaterial({ color: '#fbfbf7', roughness: 0.3 }));
@@ -555,7 +587,27 @@ export class Scene {
         const pulse = 1 + Math.sin(this.time * 18) * 0.04;
         this.slamRing.scale.set(pulse, pulse, 1);
       }
-    } else this.slamRing.visible = false;
+      // squirt direction
+      const p = state.player;
+      this.aimLine.visible = state.status === 'boss' && state.ketchup > 0 && b.mode !== 'defeated';
+      this.aimLine.position.set(p.pos.x, 0.06, p.pos.y);
+      this.aimLine.rotation.set(-Math.PI / 2, 0, -p.facing);
+      // bottles to grab
+      this.pickups.forEach((pk, i) => {
+        const bt = state.bottles[i];
+        pk.root.visible = !!bt && state.status === 'boss';
+        if (!bt) return;
+        const pop = Math.min(1, bt.age * 3);
+        pk.root.position.set(bt.pos.x, 0, bt.pos.y);
+        pk.bottle.position.y = (1 - pop) * 2.5 + 0.12 + Math.sin(this.time * 4 + i) * 0.08;
+        pk.bottle.rotation.y = this.time * 2 + i;
+        pk.glow.material.opacity = 0.45 + Math.sin(this.time * 6 + i) * 0.2;
+      });
+    } else {
+      this.slamRing.visible = false;
+      this.aimLine.visible = false;
+      for (const pk of this.pickups) pk.root.visible = false;
+    }
     for (; ki < this.ketchupBlobs.length; ki++) this.ketchupBlobs[ki].visible = false;
     for (; di < this.flyingSticks.length; di++) this.flyingSticks[di].visible = false;
   }

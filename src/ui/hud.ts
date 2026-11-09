@@ -1,5 +1,5 @@
 import { currentObjective, DASH_COOLDOWN, type GameState } from '../game/state';
-import { BOTTLE_SIZE, REFILL_TIME } from '../game/boss';
+import { BOTTLE_SIZE, BOTTLE_EVERY } from '../game/boss';
 import { SECRETS, FEAST_RECHARGE } from '../game/secrets';
 import { KEY_INFO, KEY_ORDER, type KeyColor } from '../game/types';
 import { drawKey, drawNuggetPortrait, makeCanvas } from '../render/paint';
@@ -146,7 +146,7 @@ export class Hud {
       const b = state.boss;
       $('boss-hp').style.transform = `scaleX(${Math.max(0, b.hp) / b.maxHp})`;
       const empty = state.ketchup <= 0;
-      const fill = empty ? Math.min(1, state.refill / REFILL_TIME) : state.ketchup / BOTTLE_SIZE;
+      const fill = empty ? Math.min(1, state.refill / BOTTLE_EVERY) : state.ketchup / BOTTLE_SIZE;
       $('ketchup-fill').style.transform = `scaleX(${fill})`;
       $('ketchup-fill').parentElement!.classList.toggle('empty', empty);
       document.getElementById('fire-btn')?.classList.toggle('cooling', empty);

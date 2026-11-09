@@ -3,7 +3,7 @@ import { FLOORS, START } from './levels';
 import { buildMaps, type FloorMap } from './map';
 import { findPath } from './path';
 import { canSee, angleDiff } from './vision';
-import { makeBoss, updateBossFight, ENTRY, BOSS_NAME, type Boss, type Shot } from './boss';
+import { makeBoss, updateBossFight, ENTRY, BOSS_NAME, type Boss, type Shot, type Bottle } from './boss';
 import {
   DIFFICULTY, KEY_INFO, KEY_ORDER,
   type Difficulty, type DifficultySettings, type FamilyDef, type FloorDef, type KeyColor, type Vec,
@@ -52,7 +52,8 @@ export type GameEvent =
   | { type: 'throw' }
   | { type: 'slam'; x: number; y: number }
   | { type: 'hurt' }
-  | { type: 'refill' };
+  | { type: 'refill' }
+  | { type: 'bottle'; x: number; y: number };
 
 export type ChaserMode = 'patrol' | 'alert' | 'chase' | 'search' | 'return' | 'feast';
 
@@ -167,9 +168,11 @@ export interface GameState {
   boss: Boss | null;
   /** Flying ketchup and drumsticks during the boss fight. */
   shots: Shot[];
-  /** Squirts left in the ketchup bottle, and how far an empty bottle has refilled (seconds). */
+  /** Squirts left in the ketchup bottle, and seconds since the last bottle appeared while empty. */
   ketchup: number;
   refill: number;
+  /** Full ketchup bottles lying in the garden while the nugget's bottle is empty. */
+  bottles: Bottle[];
 }
 
 const makeChaser = (def: FamilyDef, floor: number): Chaser => ({
@@ -238,6 +241,7 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
     shots: [],
     ketchup: 0,
     refill: 0,
+    bottles: [],
   };
 }
 
@@ -337,7 +341,7 @@ export function currentObjective(state: GameState): Objective | null {
   for (const color of KEY_ORDER) {
     if (state.unlocked.has(color)) {
       if (color === 'gold') {
-        if (state.boss) return { color, action: 'boss', text: `Squirt ketchup at ${BOSS_NAME}!`, hint: `Dodge the flying drumsticks, stay out of the red ring when ${BOSS_NAME} jumps, and keep squirting ketchup!` };
+        if (state.boss) return { color, action: 'boss', text: `Squirt ketchup at ${BOSS_NAME}!`, hint: `Face ${BOSS_NAME} and squirt: the ketchup goes the way you are facing. Dodge the drumsticks, stay out of the red ring, and when the bottle is empty grab the new one that appears.` };
         return { color, action: 'escape', text: 'Run out the front door!', hint: 'The front door is open. Run outside to freedom!' };
       }
       continue;

@@ -66,7 +66,7 @@ async function boot() {
   const hud = new Hud();
 
   let difficulty: Difficulty = (['easy', 'normal', 'hard'] as const).find((d) => d === params.get('difficulty')) ?? 'normal';
-  const opts: GameOptions = { noFamily: params.has('nofamily'), noBoss: params.has('noboss') };
+  const opts: GameOptions = { noFamily: params.has('nofamily'), noBoss: params.has('noboss'), seed: params.has('seed') ? Number(params.get('seed')) : undefined };
   const useBot = params.has('bot');
   const speed = Math.max(1, Math.min(20, Number(params.get('speed')) || 1));
 
@@ -396,7 +396,7 @@ async function boot() {
       case 'bossStart':
         setBossUi(true);
         hud.banner('Uncle Gus!');
-        hud.toast(isTouch() ? 'Hold <b>SQUIRT</b> to fire ketchup!' : 'Hold <b>F</b> or the mouse button to squirt ketchup!', '', 3600);
+        hud.toast(isTouch() ? 'Turn to face Uncle Gus and hold <b>SQUIRT</b>!' : 'Turn to face Uncle Gus and hold <b>F</b> or the mouse button to squirt!', '', 4000);
         break;
       case 'squirt':
         sound.squirt();
@@ -412,6 +412,11 @@ async function boot() {
         break;
       case 'refill':
         sound.refill();
+        hud.toast('Ketchup bottle full!', '', 1400);
+        break;
+      case 'bottle':
+        sound.pop();
+        hud.toast('A ketchup bottle appeared! Grab it!', '', 2000);
         break;
       case 'hurt':
         sound.caught();

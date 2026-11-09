@@ -297,7 +297,7 @@ describe('family members', () => {
 
 describe('full escape', () => {
   it('the autopilot collects every key across all floors, gets out the front door and beats the boss', () => {
-    const s = createGame('normal', { noFamily: true });
+    const s = createGame('normal', { noFamily: true, seed: 1 });
     skipIntro(s);
     let ev = run(s, 240, botInput);
     expect(s.status).toBe('bossIntro');

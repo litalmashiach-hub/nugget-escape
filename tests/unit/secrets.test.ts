@@ -74,7 +74,7 @@ describe('easter eggs', () => {
 
 describe('nugget rain (all easter eggs found)', () => {
   const allFound = () => {
-    const s = createGame('normal', { skipIntro: true });
+    const s = createGame('normal', { skipIntro: true, seed: 1 });
     for (const sd of SECRETS) s.secrets.add(sd.id);
     return s;
   };

@@ -189,7 +189,7 @@ test('finding every easter egg unlocks the NUGGET RAIN button, and the family st
 
 test('the robot player escapes the whole house and sees the win screen', async ({ page }) => {
   test.setTimeout(240_000);
-  const errors = await open(page, '?autostart&nofamily&bot&speed=12');
+  const errors = await open(page, '?autostart&nofamily&bot&speed=12&seed=1');
   const floors = new Set<number>();
   await expect.poll(async () => {
     const s = await snap(page);

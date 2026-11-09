@@ -179,6 +179,19 @@ export class NuggetModel {
 // ---------------------------------------------------------------- boss: Uncle Gus
 
 /** A fried chicken drumstick (used in the bucket and as a thrown projectile). */
+/** A full ketchup bottle standing upright (the pickup in the boss fight). */
+export function ketchupBottle() {
+  const b = builder(false, false);
+  const g = new THREE.Group();
+  g.add(cyl(b, 0, 0, 0, 0.11, 0.34, '#d91e1e', { rough: 0.3 }));
+  g.add(cyl(b, 0, 0.34, 0, 0.085, 0.07, '#ffffff', { rough: 0.4 }));
+  g.add(cyl(b, 0, 0.41, 0, 0.018, 0.1, '#ffffff', { rough: 0.4 }, 0.045));
+  g.add(cbox(b, 0, 0.17, 0.108, 0.13, 0.13, 0.012, '#fff3c4'));
+  g.add(ball(b, 0, 0.17, 0.116, 0.035, 0.035, 0.01, '#e0201c')); // tomato on the label
+  g.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+  return g;
+}
+
 export function drumstick(scale = 1) {
   const b = builder(false, false);
   const g = new THREE.Group();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createGame, update, type GameState, type Input } from '../../src/game/state';
-import { beginBossFight, bossBotInput, ARENA, BOSS_HP, ENTRY, SLAM_RADIUS } from '../../src/game/boss';
+import { beginBossFight, bossBotInput, ARENA, BOSS_HP, ENTRY, SLAM_RADIUS, BOTTLE_EVERY, BOTTLE_SIZE } from '../../src/game/boss';
 import { botInput } from '../../src/game/bot';
 import type { Difficulty } from '../../src/game/types';
 
@@ -8,8 +8,8 @@ const DT = 1 / 60;
 const idle: Input = { mx: 0, my: 0, dash: false };
 
 /** A game standing in the open front doorway, all keys used. */
-function atFrontDoor(difficulty: Difficulty = 'normal') {
-  const s = createGame(difficulty, { noFamily: true, skipIntro: true });
+function atFrontDoor(difficulty: Difficulty = 'normal', seed = 1) {
+  const s = createGame(difficulty, { noFamily: true, skipIntro: true, seed });
   for (const c of ['red', 'teal', 'orange', 'green', 'purple', 'blue', 'pink', 'gold'] as const) {
     s.held.add(c);
     s.unlocked.add(c);
@@ -63,6 +63,41 @@ describe('the boss fight at the front door', () => {
     expect(ev).toContain('squirt');
     expect(ev).toContain('bossHit');
     expect(s.boss!.hp).toBeLessThan(BOSS_HP.normal);
+  });
+
+  it('ketchup only goes where the nugget is facing', () => {
+    const s = atFrontDoor();
+    walkOut(s);
+    beginBossFight(s);
+    s.player.facing = -Math.PI / 2; // facing back at the house, away from Gus
+    const ev = fight(s, 1.0, () => ({ mx: 0, my: 0, dash: false, fire: true }));
+    expect(ev).toContain('squirt');
+    expect(ev).not.toContain('bossHit');
+    expect(s.boss!.hp).toBe(BOSS_HP.normal);
+  });
+
+  it('an empty bottle does not refill by itself: a new bottle appears every 5 seconds, grab it to refill', () => {
+    const s = atFrontDoor();
+    walkOut(s);
+    beginBossFight(s);
+    s.ketchup = 0;
+    s.boss!.timer = 999; // keep Gus calm for this test
+    s.player.invuln = 999;
+    let ev = fight(s, BOTTLE_EVERY - 0.2, () => idle);
+    expect(s.ketchup).toBe(0);
+    expect(ev).not.toContain('bottle');
+    ev = fight(s, 0.4, () => idle);
+    expect(ev).toContain('bottle');
+    expect(s.bottles).toHaveLength(1);
+    fight(s, BOTTLE_EVERY, () => idle);
+    expect(s.bottles).toHaveLength(2);
+    // walk over to the first bottle
+    const b = s.bottles[0].pos;
+    s.player.pos = { x: b.x - 0.3, y: b.y };
+    ev = fight(s, 0.2, () => ({ mx: 1, my: 0, dash: false }));
+    expect(ev).toContain('refill');
+    expect(s.ketchup).toBe(BOTTLE_SIZE);
+    expect(s.bottles).toHaveLength(0);
   });
 
   it('standing still gets the nugget hit and costs lives', () => {
@@ -119,6 +154,6 @@ describe('the boss fight at the front door', () => {
     const s = atFrontDoor();
     walkOut(s);
     beginBossFight(s);
-    expect(botInput(s).fire).toBe(true);
+    expect(botInput(s)).toEqual(bossBotInput(s));
   });
 });

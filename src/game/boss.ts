@@ -12,9 +12,14 @@ export const BOSS_NAME = 'Uncle Gus';
 export const BOSS_RADIUS = 0.8;
 export const BOSS_HP = { easy: 16, normal: 24, hard: 30 } as const;
 export const FIRE_COOLDOWN = 0.25;
-/** Squirts in a full bottle; an empty bottle refills completely after REFILL_TIME. */
+/** Squirts in a full bottle. */
 export const BOTTLE_SIZE = 8;
-export const REFILL_TIME = 2.2;
+/** While the bottle is empty, a new ketchup bottle appears in the garden this often (seconds). */
+export const BOTTLE_EVERY = 5;
+/** At most this many bottles lying around at once. */
+export const MAX_BOTTLES = 3;
+/** How close the nugget has to get to grab a bottle. */
+export const GRAB_RADIUS = 0.6;
 export const KETCHUP_SPEED = 10;
 export const DRUMSTICK_SPEED = 5.2;
 export const SLAM_RADIUS = 1.7;
@@ -48,6 +53,13 @@ export interface Shot {
   vel: Vec;
   life: number;
   spin: number;
+}
+
+/** A full ketchup bottle lying in the garden, waiting to be grabbed. */
+export interface Bottle {
+  pos: Vec;
+  /** Seconds since it appeared (for the pop-in animation). */
+  age: number;
 }
 
 export const ENTRY = { x: 15, y: 23.3 };
@@ -85,6 +97,7 @@ export function beginBossFight(state: GameState) {
   state.player.invuln = 0.8;
   state.ketchup = BOTTLE_SIZE;
   state.refill = 0;
+  state.bottles = [];
   state.status = 'boss';
   state.events.push({ type: 'bossStart' });
 }
@@ -143,19 +156,28 @@ export function updateBossFight(state: GameState, input: Input, dt: number) {
     }
   }
 
-  // Ketchup! The bottle always aims at Gus, so younger players only have to dodge.
+  // Ketchup! When the bottle runs dry, a fresh one appears in the garden every few seconds.
+  for (const b of state.bottles) b.age += dt;
   if (state.ketchup <= 0) {
     state.refill += dt;
-    if (state.refill >= REFILL_TIME) {
+    if (state.refill >= BOTTLE_EVERY && state.bottles.length < MAX_BOTTLES) {
+      state.refill = 0;
+      const pos = bottleSpot(state);
+      state.bottles.push({ pos, age: 0 });
+      state.events.push({ type: 'bottle', x: pos.x, y: pos.y });
+    }
+    const got = state.bottles.find((b) => dist(b.pos, p.pos) < GRAB_RADIUS + PLAYER_R);
+    if (got) {
       state.ketchup = BOTTLE_SIZE;
       state.refill = 0;
+      state.bottles = [];
       state.events.push({ type: 'refill' });
     }
   }
+  // The squirt goes straight where the nugget is facing: aim by turning.
   if (input.fire && p.fireCd <= 0 && state.ketchup > 0 && boss.mode !== 'defeated') {
     state.ketchup--;
-    const aim = angleTo(p.pos, boss.pos);
-    p.facing = aim;
+    const aim = p.facing;
     p.fireCd = FIRE_COOLDOWN;
     state.shots.push({
       kind: 'ketchup',
@@ -289,6 +311,18 @@ export function updateBossFight(state: GameState, input: Input, dt: number) {
   }
 }
 
+/** A random open spot in the garden, away from Gus and not right under the nugget. */
+function bottleSpot(state: GameState): Vec {
+  const r = state.rand;
+  let best: Vec = { x: (ARENA.x0 + ARENA.x1) / 2, y: (ARENA.y0 + ARENA.y1) / 2 };
+  for (let i = 0; i < 20; i++) {
+    const v = { x: ARENA.x0 + 1 + r() * (ARENA.x1 - ARENA.x0 - 2), y: ARENA.y0 + 1 + r() * (ARENA.y1 - ARENA.y0 - 2) };
+    if (dist(v, state.boss!.pos) > 2.5 && dist(v, state.player.pos) > 2) return v;
+    best = v;
+  }
+  return best;
+}
+
 /** Autopilot for the fight: circle around Gus at a safe distance and keep squirting. */
 export function bossBotInput(state: GameState): Input {
   const boss = state.boss!;
@@ -296,11 +330,30 @@ export function bossBotInput(state: GameState): Input {
   if (state.status !== 'boss') return { mx: 0, my: 0, dash: false };
   const d = dist(p.pos, boss.pos);
   const a = angleTo(boss.pos, p.pos);
-  // circle (tangent) plus a push to hold ~4.5 tiles away
-  let mx = -Math.sin(a), my = Math.cos(a);
-  const want = 5.5;
-  mx += Math.cos(a) * (want - d) * 0.8;
-  my += Math.sin(a) * (want - d) * 0.8;
+  const toGus = angleTo(p.pos, boss.pos);
+  let mx: number, my: number;
+  let fire = false;
+  const bottle = state.ketchup <= 0
+    ? state.bottles.slice().sort((x, y) => dist(x.pos, p.pos) - dist(y.pos, p.pos))[0]
+    : undefined;
+  if (bottle) {
+    // out of ketchup: run for the nearest bottle
+    const b = angleTo(p.pos, bottle.pos);
+    mx = Math.cos(b) * 1.5;
+    my = Math.sin(b) * 1.5;
+    // ...without running into Gus on the way
+    if (d < 3.2) {
+      mx += Math.cos(a) * (3.2 - d) * 1.6;
+      my += Math.sin(a) * (3.2 - d) * 1.6;
+    }
+  } else {
+    // circle (tangent) plus a push to hold ~5.5 tiles away
+    mx = -Math.sin(a);
+    my = Math.cos(a);
+    const want = 5.5;
+    mx += Math.cos(a) * (want - d) * 0.8;
+    my += Math.sin(a) * (want - d) * 0.8;
+  }
   // stay out of the slam ring
   if (boss.target && dist(p.pos, boss.target) < SLAM_RADIUS + 0.8) {
     const b = angleTo(boss.target, p.pos);
@@ -315,6 +368,7 @@ export function bossBotInput(state: GameState): Input {
   }
   // sidestep drumsticks heading our way
   let dash = false;
+  let threat = false;
   for (const s of state.shots) {
     if (s.kind !== 'drumstick') continue;
     const rx = p.pos.x - s.pos.x, ry = p.pos.y - s.pos.y;
@@ -323,12 +377,28 @@ export function bossBotInput(state: GameState): Input {
     if (along < 0 || along > 3) continue;
     const side = (rx * s.vel.y - ry * s.vel.x) / sp;
     if (Math.abs(side) < 0.95) {
-      const sgn = side >= 0 ? 1 : -1;
+      threat = true;
+      let sgn = side >= 0 ? 1 : -1;
+      // never dodge into the fence: go the other way
+      const ex = p.pos.x + (s.vel.y / sp) * sgn * 1.3, ey = p.pos.y + (-s.vel.x / sp) * sgn * 1.3;
+      if (ex < ARENA.x0 + 0.5 || ex > ARENA.x1 - 0.5 || ey < ARENA.y0 + 0.5 || ey > ARENA.y1 - 0.5) sgn = -sgn;
       mx += (s.vel.y / sp) * sgn * 2.5;
       my += (-s.vel.x / sp) * sgn * 2.5;
       dash = along < 1.2;
     }
   }
   const len = Math.hypot(mx, my) || 1;
-  return { mx: mx / len, my: my / len, dash, fire: true };
+  mx /= len;
+  my /= len;
+  // Safe moment with ketchup in the bottle: turn to face Gus (a tiny step toward him) and squirt.
+  const safe = !threat && !boss.target && boss.mode !== 'jump' && boss.mode !== 'throwWindup' && d > 3.4;
+  if (state.ketchup > 0 && safe) {
+    mx = Math.cos(toGus) * 0.12;
+    my = Math.sin(toGus) * 0.12;
+    let off = (toGus - p.facing) % (Math.PI * 2);
+    if (off > Math.PI) off -= Math.PI * 2;
+    if (off < -Math.PI) off += Math.PI * 2;
+    fire = Math.abs(off) < 0.12;
+  }
+  return { mx, my, dash, fire };
 }

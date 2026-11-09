@@ -187,6 +187,13 @@ export class Sound {
     const t = this.ctx.currentTime;
     [392, 370, 349, 330].forEach((f, i) => this.tone(f, 0.45, { type: 'triangle', vol: 0.2, at: t + i * 0.3, slide: 0.98 }));
   }
+  /** Something pops into view (a ketchup bottle appears). */
+  pop() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.tone(420, 0.08, { type: 'sine', vol: 0.22, at: t });
+    this.tone(880, 0.12, { type: 'sine', vol: 0.18, at: t + 0.06 });
+  }
   click() {
     this.tone(880, 0.06, { type: 'triangle', vol: 0.15 });
   }
