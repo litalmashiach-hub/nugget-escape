@@ -73,6 +73,8 @@ export interface Chaser {
   seesPlayer: boolean;
   moving: boolean;
   walkPhase: number;
+  /** Speed factor for the current patrol walk: people amble faster or slower each time. */
+  stride: number;
 }
 
 /** A chicken nugget that rained from the ceiling. `drop` counts down to when it lands. */
@@ -117,10 +119,26 @@ export interface GameOptions {
   /** Start playing at once (the opening cutscene already showed the nugget hopping off the plate). */
   skipIntro?: boolean;
   floors?: FloorDef[];
+  /** Fixes the family's random wandering (for tests and replays). */
+  seed?: number;
+}
+
+/** Small seeded random number generator (mulberry32). */
+export function makeRandom(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 export interface GameState {
   maps: FloorMap[];
+  /** Random numbers for the family's wandering. */
+  rand: () => number;
   difficulty: Difficulty;
   settings: DifficultySettings;
   player: Player;
@@ -171,6 +189,7 @@ const makeChaser = (def: FamilyDef, floor: number): Chaser => ({
   seesPlayer: false,
   moving: false,
   walkPhase: 0,
+  stride: 1,
 });
 
 export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions = {}): GameState {
@@ -195,6 +214,7 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
       stairsArmed: true,
       arriveDir: { x: 0, y: 0 },
     },
+    rand: makeRandom(opts.seed ?? Math.floor(Math.random() * 2 ** 31)),
     chasers: opts.noFamily ? [] : floors.flatMap((fl) => fl.family.map((d) => makeChaser(d, fl.id))),
     keys: floors.flatMap((fl) => fl.keys.map((k) => ({ ...k, x: k.x + 0.5, y: k.y + 0.5, floor: fl.id, taken: false }))),
     held: new Set(),
@@ -598,6 +618,38 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
   }
 }
 
+/**
+ * Where a family member wanders next: usually one of their usual spots (in any
+ * order), sometimes a random spot around their part of the house.
+ */
+function pickWander(state: GameState, c: Chaser): Vec[] {
+  const r = state.rand;
+  const map = state.maps[c.floor];
+  const wps = c.def.waypoints;
+  const here = { x: Math.floor(c.pos.x), y: Math.floor(c.pos.y) };
+  const xs = wps.map((w) => w[0]), ys = wps.map((w) => w[1]);
+  const box = { x0: Math.min(...xs) - 3, x1: Math.max(...xs) + 3, y0: Math.min(...ys) - 3, y1: Math.max(...ys) + 3 };
+  for (let tries = 0; tries < 12; tries++) {
+    let tx: number, ty: number;
+    if (r() < 0.55) {
+      const i = Math.floor(r() * wps.length);
+      if (i === c.wp && wps.length > 1) continue;
+      [tx, ty] = wps[i];
+      c.wp = i;
+    } else {
+      tx = Math.floor(box.x0 + r() * (box.x1 - box.x0 + 1));
+      ty = Math.floor(box.y0 + r() * (box.y1 - box.y0 + 1));
+      if (!map.walkableForFamily(tx, ty, state.unlocked) || map.isStairs(tx, ty)) continue;
+    }
+    if (Math.abs(tx - here.x) + Math.abs(ty - here.y) < 3) continue;
+    const path = pathTo(state, c, { x: tx + 0.5, y: ty + 0.5 });
+    const last = path?.[path.length - 1];
+    // Only exact, reasonably short trips: no wandering behind locked doors or across the whole house.
+    if (path && last && Math.floor(last.x) === tx && Math.floor(last.y) === ty && path.length < 40) return path;
+  }
+  return [];
+}
+
 /** Facing angle pointing from the nearby stairs toward `pos`: into the room. */
 function awayFromStairs(map: FloorMap, pos: Vec): number | null {
   let sx = 0, sy = 0, n = 0;
@@ -681,32 +733,33 @@ function updateChaser(state: GameState, c: Chaser, dt: number) {
 
   switch (c.mode) {
     case 'patrol': {
+      const r = state.rand;
       if (c.pause > 0) {
+        // Standing around, looking this way and that.
         c.pause -= dt;
         c.moving = false;
-        c.facing = c.lookBase + Math.sin(c.pause * 2.6) * 0.9;
-        if (c.pause <= 0) c.wp = (c.wp + 1) % c.def.waypoints.length;
+        c.facing = c.lookBase + Math.sin(c.pause * (1.8 + c.stride * 1.6) + c.walkPhase) * (0.5 + c.stride * 0.6);
         break;
       }
       if (!c.path.length) {
-        // Skip waypoints that are behind locked doors.
-        for (let tries = 0; tries < c.def.waypoints.length; tries++) {
-          const w = c.def.waypoints[c.wp];
-          const path = pathTo(state, c, { x: w[0] + 0.5, y: w[1] + 0.5 });
-          const exact = path && path.length && Math.floor(path[path.length - 1].x) === w[0] && Math.floor(path[path.length - 1].y) === w[1];
-          if (path && exact) { c.path = path; break; }
-          if (Math.floor(c.pos.x) === w[0] && Math.floor(c.pos.y) === w[1]) { c.path = []; break; }
-          c.wp = (c.wp + 1) % c.def.waypoints.length;
-        }
+        c.path = pickWander(state, c);
+        c.stride = 0.75 + r() * 0.55;
         if (!c.path.length) {
-          c.pause = 1.2;
+          c.pause = 0.6 + r() * 1.2;
           c.lookBase = c.facing;
           break;
         }
       }
-      if (followPath(state, c, c.def.patrolSpeed * s.patrolMult, dt)) {
-        c.pause = 1.1;
-        c.lookBase = c.facing;
+      // Now and then stop mid-walk to look around, or change their mind and go somewhere else.
+      if (r() < dt * 0.12) {
+        c.pause = 0.5 + r() * 1.3;
+        c.lookBase = c.facing + (r() - 0.5) * 2;
+        if (r() < 0.5) c.path = [];
+        break;
+      }
+      if (followPath(state, c, c.def.patrolSpeed * s.patrolMult * c.stride, dt)) {
+        c.pause = r() < 0.25 ? 0.15 : 0.5 + r() * 2.2;
+        c.lookBase = c.facing + (r() - 0.5) * 1.5;
       }
       break;
     }

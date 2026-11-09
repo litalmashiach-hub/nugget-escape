@@ -248,6 +248,26 @@ describe('family members', () => {
     expect(Math.hypot(dad.pos.x - start.x, dad.pos.y - start.y)).toBeGreaterThan(2);
   });
 
+  it('wander unpredictably: different games take different routes', () => {
+    const route = (seed: number) => {
+      const s = createGame('normal', { seed });
+      skipIntro(s);
+      s.player.floor = 2; s.player.pos = { x: 5.5, y: 3.5 }; // out of the way, locked in storage
+      const dad = s.chasers.find((c) => c.def.id === 'dad')!;
+      const cells: string[] = [];
+      for (let i = 0; i < 60 * 30; i++) {
+        update(s, idle, DT);
+        if (i % 60 === 0) cells.push(`${Math.floor(dad.pos.x)},${Math.floor(dad.pos.y)}`);
+      }
+      return cells;
+    };
+    expect(route(1)).toEqual(route(1)); // same seed, same walk
+    expect(route(1)).not.toEqual(route(2));
+    expect(route(2)).not.toEqual(route(3));
+    // and they do not just loop the same few tiles
+    expect(new Set(route(4)).size).toBeGreaterThan(8);
+  });
+
   it('never walk into walls while patrolling for a long time', () => {
     const s = createGame('hard');
     skipIntro(s);
