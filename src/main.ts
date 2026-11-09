@@ -479,7 +479,8 @@ async function boot() {
       case 'bossStart':
         setBossUi(true);
         hud.banner('Uncle Gus!');
-        hud.toast(isTouch() ? 'Turn to face Uncle Gus and hold <b>SQUIRT</b>!' : 'Turn to face Uncle Gus and hold <b>F</b> or the mouse button to squirt!', '', 4000);
+        if (state.difficulty === 'easy') hud.toast(isTouch() ? 'Hold <b>SQUIRT</b>: on Easy the ketchup flies at Uncle Gus by itself!' : 'Hold <b>F</b> or the mouse button: on Easy the ketchup flies at Uncle Gus by itself!', '', 4000);
+        else hud.toast(isTouch() ? 'Turn to face Uncle Gus and hold <b>SQUIRT</b>!' : 'Turn to face Uncle Gus and hold <b>F</b> or the mouse button to squirt!', '', 4000);
         break;
       case 'squirt':
         sound.squirt();

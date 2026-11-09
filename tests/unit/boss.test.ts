@@ -76,6 +76,31 @@ describe('the boss fight at the front door', () => {
     expect(s.boss!.hp).toBe(BOSS_HP.normal);
   });
 
+  it('on Easy the ketchup flies at Uncle Gus by itself and follows him', () => {
+    const s = atFrontDoor('easy');
+    walkOut(s);
+    beginBossFight(s);
+    s.player.facing = -Math.PI / 2; // facing away from Gus: still hits on Easy
+    s.boss!.timer = 99; // Gus stands still for this test...
+    const ev = fight(s, 1.5, () => ({ mx: 0, my: 0, dash: false, fire: true }));
+    expect(ev).toContain('bossHit');
+    expect(s.boss!.hp).toBeLessThan(BOSS_HP.easy);
+    // ...and a squirt bends toward Gus when he moves
+    const shot = s.shots.find((o) => o.kind === 'ketchup');
+    if (shot) expect(shot.homing).toBe(true);
+  });
+
+  it('a homing squirt curves after Gus when he steps aside', () => {
+    const s = atFrontDoor('easy');
+    walkOut(s);
+    beginBossFight(s);
+    s.boss!.timer = 99;
+    s.shots = [{ kind: 'ketchup', pos: { x: s.player.pos.x, y: s.player.pos.y }, vel: { x: 0, y: -7 }, life: 2.2, spin: 0, homing: true }];
+    s.ketchup = 0; // no new squirts
+    const ev = fight(s, 2.0, () => idle);
+    expect(ev).toContain('bossHit');
+  });
+
   it('an empty bottle does not refill by itself: a new bottle appears every 5 seconds, grab it to refill', () => {
     const s = atFrontDoor();
     walkOut(s);

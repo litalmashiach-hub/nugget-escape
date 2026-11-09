@@ -47,8 +47,18 @@ export interface Boss {
   attacks: number;
 }
 
+/** How fast homing ketchup turns toward Gus (radians per second, roughly). */
+const HOMING_TURN = 9;
+
+/** Easy mode: ketchup aims itself at Uncle Gus and follows him. */
+export function autoAim(state: GameState) {
+  return state.difficulty === 'easy';
+}
+
 export interface Shot {
   kind: 'ketchup' | 'drumstick';
+  /** Easy mode ketchup: follows Uncle Gus. */
+  homing?: boolean;
   pos: Vec;
   vel: Vec;
   life: number;
@@ -175,16 +185,19 @@ export function updateBossFight(state: GameState, input: Input, dt: number) {
     }
   }
   // The squirt goes straight where the nugget is facing: aim by turning.
+  // On Easy it flies at Uncle Gus by itself and follows him.
+  const homing = autoAim(state);
   if (input.fire && p.fireCd <= 0 && state.ketchup > 0 && boss.mode !== 'defeated') {
     state.ketchup--;
-    const aim = p.facing;
+    const aim = homing ? angleTo(p.pos, boss.pos) : p.facing;
     p.fireCd = FIRE_COOLDOWN;
     state.shots.push({
       kind: 'ketchup',
       pos: { x: p.pos.x + Math.cos(aim) * 0.35, y: p.pos.y + Math.sin(aim) * 0.35 },
       vel: { x: Math.cos(aim) * KETCHUP_SPEED, y: Math.sin(aim) * KETCHUP_SPEED },
-      life: 1.4,
+      life: homing ? 2.2 : 1.4,
       spin: 0,
+      homing,
     });
     state.events.push({ type: 'squirt' });
   }
@@ -192,6 +205,13 @@ export function updateBossFight(state: GameState, input: Input, dt: number) {
   // ------------------------------------------------ shots
   for (const s of state.shots) {
     s.life -= dt;
+    if (s.homing && boss.mode !== 'defeated') {
+      // steer toward Gus, keeping the same speed
+      const want = angleTo(s.pos, boss.pos);
+      const a = turn(Math.atan2(s.vel.y, s.vel.x), want, dt * HOMING_TURN);
+      const sp = Math.hypot(s.vel.x, s.vel.y);
+      s.vel = { x: Math.cos(a) * sp, y: Math.sin(a) * sp };
+    }
     s.pos.x += s.vel.x * dt;
     s.pos.y += s.vel.y * dt;
     s.spin += dt * 12;

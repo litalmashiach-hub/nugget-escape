@@ -362,7 +362,7 @@ export function currentObjective(state: GameState): Objective | null {
         return { color, action: 'escape', text: `Get into the ${goal.room.name}!`, hint: `The door is open. Run into the ${goal.room.name}!` };
       }
       if (color === 'gold') {
-        if (state.boss) return { color, action: 'boss', text: `Squirt ketchup at ${BOSS_NAME}!`, hint: `Face ${BOSS_NAME} and squirt: the ketchup goes the way you are facing. Dodge the drumsticks, stay out of the red ring, and when the bottle is empty grab the new one that appears.` };
+        if (state.boss) return { color, action: 'boss', text: `Squirt ketchup at ${BOSS_NAME}!`, hint: `${state.difficulty === 'easy' ? 'Squirt away: on Easy the ketchup flies at ' + BOSS_NAME + ' by itself.' : `Face ${BOSS_NAME} and squirt: the ketchup goes the way you are facing.`} Dodge the drumsticks, stay out of the red ring, and when the bottle is empty grab the new one that appears.` };
         return { color, action: 'escape', text: 'Run out the front door!', hint: 'The front door is open. Run outside to freedom!' };
       }
       continue;

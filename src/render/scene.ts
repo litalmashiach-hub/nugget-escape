@@ -15,7 +15,7 @@ import { StreetCutscene } from './street';
 const START = LEVEL1.start as Required<typeof LEVEL1.start>;
 import { INTRO_TIME, type Chaser, type GameEvent, type GameState } from '../game/state';
 import { castRay } from '../game/vision';
-import { ARENA, SLAM_RADIUS } from '../game/boss';
+import { ARENA, SLAM_RADIUS, autoAim } from '../game/boss';
 import { KEY_INFO, type KeyColor } from '../game/types';
 
 export type View = 'game' | 'menu' | 'cutscene' | 'bossIntro' | 'street';
@@ -623,7 +623,9 @@ export class Scene {
       const p = state.player;
       this.aimLine.visible = state.status === 'boss' && state.ketchup > 0 && b.mode !== 'defeated';
       this.aimLine.position.set(p.pos.x, 0.06, p.pos.y);
-      this.aimLine.rotation.set(-Math.PI / 2, 0, -p.facing);
+      // on Easy the ketchup flies at Gus by itself, so the line points at him
+      const aim = autoAim(state) ? Math.atan2(b.pos.y - p.pos.y, b.pos.x - p.pos.x) : p.facing;
+      this.aimLine.rotation.set(-Math.PI / 2, 0, -aim);
       // bottles to grab
       this.pickups.forEach((pk, i) => {
         const bt = state.bottles[i];
