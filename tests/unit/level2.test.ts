@@ -5,6 +5,7 @@ import {
 import { botInput, solveHouse } from '../../src/game/bot';
 import { canSee } from '../../src/game/vision';
 import { CART_WINDUP, cartSpawn } from '../../src/game/carts';
+import { beginBossFight, bossBotInput, MANAGER, OFFICE_ARENA } from '../../src/game/boss';
 import { LEVEL1, LEVEL2, LEVELS, STORE } from '../../src/game/levels';
 import { buildMaps } from '../../src/game/map';
 import type { Difficulty } from '../../src/game/types';
@@ -70,7 +71,7 @@ describe('level 2: the grocery store', () => {
     expect(currentObjective(s)?.text).toBe('Find the Green key');
   });
 
-  it('the gold key opens the Manager\'s Office, and walking in wins (no boss fight)', () => {
+  it('the gold key opens the Manager\'s Office, and walking in starts the Manager boss fight', () => {
     const s = createGame('normal', { level: 2, noFamily: true, seed: 1 });
     skipIntro(s);
     for (const c of ['green', 'orange', 'purple', 'gold'] as const) s.held.add(c);
@@ -80,10 +81,57 @@ describe('level 2: the grocery store', () => {
     s.player.pos = { x: 69.5, y: 17.6 };
     const ev = run(s, 3, () => ({ mx: 0, my: -1, dash: false }));
     expect(ev).toContain('unlock');
+    expect(ev).toContain('bossIntro');
+    expect(s.status).toBe('bossIntro');
+    expect(s.boss).not.toBeNull();
+    expect(s.player.pos).toEqual(MANAGER.entry);
+    beginBossFight(s);
+    expect(s.status).toBe('boss');
+    expect(currentObjective(s)?.text).toBe('Squirt ketchup at the Manager!');
+    expect(currentObjective(s)?.hint).toContain('pink slips');
+  });
+
+  it('with ?noboss walking into the office wins straight away', () => {
+    const s = createGame('normal', { level: 2, noFamily: true, noBoss: true, seed: 1 });
+    skipIntro(s);
+    for (const c of ['green', 'orange', 'purple', 'gold'] as const) { s.held.add(c); s.unlocked.add(c); }
+    s.player.pos = { x: 69.5, y: 16.5 };
+    const ev = run(s, 2, () => ({ mx: 0, my: -1, dash: false }));
     expect(ev).toContain('win');
-    expect(ev).not.toContain('bossIntro');
     expect(s.status).toBe('won');
     expect(s.boss).toBeNull();
+  });
+
+  it('the Manager throws pink slips and stomps, and everyone stays inside the office', () => {
+    const s = createGame('normal', { level: 2, noFamily: true, seed: 4 });
+    s.status = 'bossIntro' as GameState['status'];
+    beginBossFight(s);
+    const kinds = new Set<string>();
+    const ev: string[] = [];
+    for (let t = 0; t < 12 && s.status === 'boss'; t += DT) {
+      update(s, idle, DT);
+      for (const sh of s.shots) kinds.add(sh.kind);
+      ev.push(...s.events.map((e) => e.type));
+      for (const v of [s.player.pos, s.boss!.pos]) {
+        expect(v.x).toBeGreaterThanOrEqual(OFFICE_ARENA.x0);
+        expect(v.x).toBeLessThanOrEqual(OFFICE_ARENA.x1);
+        expect(v.y).toBeGreaterThanOrEqual(OFFICE_ARENA.y0);
+        expect(v.y).toBeLessThanOrEqual(OFFICE_ARENA.y1);
+      }
+    }
+    expect(kinds.has('slip')).toBe(true);
+    expect(kinds.has('drumstick')).toBe(false);
+    expect(ev).toContain('slam');
+    expect(s.lives).toBeLessThan(3);
+  });
+
+  it('losing every life to the Manager says who did it', () => {
+    const s = createGame('normal', { level: 2, noFamily: true, seed: 4 });
+    s.status = 'bossIntro' as GameState['status'];
+    beginBossFight(s);
+    for (let t = 0; t < 120 && s.status === 'boss'; t += DT) update(s, idle, DT);
+    expect(s.status).toBe('gameover');
+    expect(s.caughtBy).toBe('The Manager');
   });
 
   it('after the gold door opens the goal is to get into the office', () => {
@@ -149,11 +197,16 @@ describe('level 2: the grocery store', () => {
     }
   });
 
-  it('the autopilot finds all four keys and reaches the Manager\'s Office', () => {
+  it('the autopilot finds all four keys, reaches the Manager\'s Office and beats the Manager', () => {
     const s = createGame('normal', { level: 2, noFamily: true, seed: 1 });
     skipIntro(s);
     const ev = run(s, 240, botInput);
+    expect(s.status).toBe('bossIntro');
+    expect(s.maps[0].roomAt(s.player.pos.x, s.player.pos.y)?.id).toBe('office');
+    beginBossFight(s);
+    ev.push(...run(s, 180, bossBotInput));
     expect(s.status).toBe('won');
+    expect(ev).toContain('bossDown');
     expect(ev.filter((e) => e === 'key')).toHaveLength(4);
     expect(ev.filter((e) => e === 'unlock')).toHaveLength(4);
     expect(s.maps[0].roomAt(s.player.pos.x, s.player.pos.y)?.id).toBe('office');
@@ -238,6 +291,7 @@ describe('level 2: the grocery store', () => {
       const s = createGame(d, { level: 2, seed });
       skipIntro(s);
       run(s, 240, botInput);
+      if (s.status === 'bossIntro') { beginBossFight(s); run(s, 180, botInput); }
       if (s.status === 'won') wins++;
     }
     expect(wins).toBeGreaterThan(0);

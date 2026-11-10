@@ -1,13 +1,17 @@
 /**
- * The boss fight in the front garden. Right outside the front door, Uncle Gus (eating
- * from a bucket of fried chicken) blocks the way. The nugget squirts ketchup at him while
- * dodging thrown drumsticks and belly slams. Pure game rules: no rendering here.
+ * The boss fights. Level 1: right outside the front door, Uncle Gus (eating from a bucket
+ * of fried chicken) blocks the way, throwing drumsticks and doing belly slams.
+ * Level 2: the store Manager catches the nugget snooping in the office and throws pink
+ * slips ("YOU'RE FIRED!") and stomps. The nugget squirts ketchup back.
+ * Pure game rules: no rendering here.
  */
 import type { GameState, Input } from './state';
 import type { Vec } from './types';
 
+export interface Arena { x0: number; x1: number; y0: number; y1: number }
+
 /** The fenced front garden, in ground-floor map coordinates (south of the house). */
-export const ARENA = { x0: 7.6, x1: 24.4, y0: 22.7, y1: 31.4 };
+export const ARENA: Arena = { x0: 7.6, x1: 24.4, y0: 22.7, y1: 31.4 };
 export const BOSS_NAME = 'Uncle Gus';
 export const BOSS_RADIUS = 0.8;
 export const BOSS_HP = { easy: 16, normal: 24, hard: 30 } as const;
@@ -56,7 +60,8 @@ export function autoAim(state: GameState) {
 }
 
 export interface Shot {
-  kind: 'ketchup' | 'drumstick';
+  /** The nugget's ketchup, or what the boss throws. */
+  kind: 'ketchup' | 'drumstick' | 'slip';
   /** Easy mode ketchup: follows Uncle Gus. */
   homing?: boolean;
   pos: Vec;
@@ -75,17 +80,56 @@ export interface Bottle {
 export const ENTRY = { x: 15, y: 23.3 };
 const BOSS_START = { x: 15, y: 26.4 };
 
+/** Who the boss is and where the fight happens. */
+export interface BossDef {
+  /** Name as a heading ("Uncle Gus", "The Manager"). */
+  name: string;
+  /** Name inside a sentence ("Uncle Gus", "the Manager"). */
+  the: string;
+  /** Where the fight happens: nobody can leave this box. */
+  arena: Arena;
+  /** Where the nugget and the boss stand when the fight starts. */
+  entry: Vec;
+  start: Vec;
+  /** What the boss throws ('drumstick' for Gus, 'slip' for the Manager's pink slips). */
+  shot: 'drumstick' | 'slip';
+  /** Words for the hints. */
+  throws: string;
+  slam: string;
+  /** Name of the place, for the HUD. */
+  place: string;
+}
+
+export const GUS: BossDef = {
+  name: BOSS_NAME, the: BOSS_NAME, arena: ARENA, entry: ENTRY, start: BOSS_START,
+  shot: 'drumstick', throws: 'drumsticks', slam: 'belly slam', place: 'Front Garden',
+};
+
+/** The Manager's Office (Level 2), in store map coordinates: below the desk, inside the walls. */
+export const OFFICE_ARENA: Arena = { x0: 61.3, x1: 78.7, y0: 5.3, y1: 15.7 };
+
+export const MANAGER: BossDef = {
+  name: 'The Manager', the: 'the Manager', arena: OFFICE_ARENA,
+  entry: { x: 69.5, y: 6.4 }, start: { x: 69.5, y: 11.6 },
+  shot: 'slip', throws: 'pink slips', slam: 'big stomp', place: "Manager's Office",
+};
+
+/** The boss of the level being played. */
+export function bossDef(state: GameState): BossDef {
+  return state.level.id === 2 ? MANAGER : GUS;
+}
+
 export function makeBoss(state: GameState): Boss {
   const hp = BOSS_HP[state.difficulty];
   return {
-    pos: { ...BOSS_START }, facing: -Math.PI / 2, hp, maxHp: hp, mode: 'walk', timer: 1.2,
+    pos: { ...bossDef(state).start }, facing: -Math.PI / 2, hp, maxHp: hp, mode: 'walk', timer: 1.2,
     target: null, jumpFrom: null, jump: 0, flash: 0, walkPhase: 0, attacks: 0,
   };
 }
 
-const clampArena = (p: Vec, r: number) => {
-  p.x = Math.max(ARENA.x0 + r, Math.min(ARENA.x1 - r, p.x));
-  p.y = Math.max(ARENA.y0 + r, Math.min(ARENA.y1 - r, p.y));
+const clampTo = (a: Arena, p: Vec, r: number) => {
+  p.x = Math.max(a.x0 + r, Math.min(a.x1 - r, p.x));
+  p.y = Math.max(a.y0 + r, Math.min(a.y1 - r, p.y));
 };
 
 const angleTo = (a: Vec, b: Vec) => Math.atan2(b.y - a.y, b.x - a.x);
@@ -102,7 +146,7 @@ function turn(from: number, to: number, k: number) {
 export function beginBossFight(state: GameState) {
   if (state.status !== 'bossIntro') return;
   state.boss ??= makeBoss(state);
-  state.player.pos = { ...ENTRY };
+  state.player.pos = { ...bossDef(state).entry };
   state.player.facing = Math.PI / 2;
   state.player.invuln = 0.8;
   state.ketchup = BOTTLE_SIZE;
@@ -121,7 +165,7 @@ function hurtPlayer(state: GameState) {
   state.events.push({ type: 'hurt' });
   if (state.lives <= 0) {
     state.status = 'gameover';
-    state.caughtBy = BOSS_NAME;
+    state.caughtBy = bossDef(state).name;
     state.events.push({ type: 'gameover' });
   }
 }
@@ -129,6 +173,9 @@ function hurtPlayer(state: GameState) {
 export function updateBossFight(state: GameState, input: Input, dt: number) {
   const boss = state.boss!;
   const p = state.player;
+  const def = bossDef(state);
+  const ARENA = def.arena;
+  const clampArena = (v: Vec, r: number) => clampTo(ARENA, v, r);
   state.time += dt;
   p.invuln = Math.max(0, p.invuln - dt);
   p.dashCd = Math.max(0, p.dashCd - dt);
@@ -278,7 +325,7 @@ export function updateBossFight(state: GameState, input: Input, dt: number) {
         for (let i = 0; i < n; i++) {
           const a = base + (i - (n - 1) / 2) * spread;
           state.shots.push({
-            kind: 'drumstick',
+            kind: def.shot,
             pos: { x: boss.pos.x + Math.cos(a) * 0.9, y: boss.pos.y + Math.sin(a) * 0.9 },
             vel: { x: Math.cos(a) * DRUMSTICK_SPEED * mult, y: Math.sin(a) * DRUMSTICK_SPEED * mult },
             life: 3,
@@ -331,9 +378,10 @@ export function updateBossFight(state: GameState, input: Input, dt: number) {
   }
 }
 
-/** A random open spot in the garden, away from Gus and not right under the nugget. */
+/** A random open spot in the arena, away from the boss and not right under the nugget. */
 function bottleSpot(state: GameState): Vec {
   const r = state.rand;
+  const ARENA = bossDef(state).arena;
   let best: Vec = { x: (ARENA.x0 + ARENA.x1) / 2, y: (ARENA.y0 + ARENA.y1) / 2 };
   for (let i = 0; i < 20; i++) {
     const v = { x: ARENA.x0 + 1 + r() * (ARENA.x1 - ARENA.x0 - 2), y: ARENA.y0 + 1 + r() * (ARENA.y1 - ARENA.y0 - 2) };
@@ -347,6 +395,7 @@ function bottleSpot(state: GameState): Vec {
 export function bossBotInput(state: GameState): Input {
   const boss = state.boss!;
   const p = state.player;
+  const ARENA = bossDef(state).arena;
   if (state.status !== 'boss') return { mx: 0, my: 0, dash: false };
   const d = dist(p.pos, boss.pos);
   const a = angleTo(boss.pos, p.pos);
@@ -390,7 +439,7 @@ export function bossBotInput(state: GameState): Input {
   let dash = false;
   let threat = false;
   for (const s of state.shots) {
-    if (s.kind !== 'drumstick') continue;
+    if (s.kind === 'ketchup') continue;
     const rx = p.pos.x - s.pos.x, ry = p.pos.y - s.pos.y;
     const sp = Math.hypot(s.vel.x, s.vel.y);
     const along = (rx * s.vel.x + ry * s.vel.y) / sp;

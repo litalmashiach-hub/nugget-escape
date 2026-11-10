@@ -1,13 +1,14 @@
 import './style.css';
 import { createGame, currentObjective, update, startFeast, type GameEvent, type GameOptions, type GameState } from './game/state';
 import { botInput } from './game/bot';
-import { beginBossFight, makeBoss, ENTRY } from './game/boss';
+import { beginBossFight, makeBoss, bossDef, ENTRY, MANAGER } from './game/boss';
 import { SECRETS } from './game/secrets';
 import { KEY_INFO, type Difficulty } from './game/types';
 import type { LevelId } from './game/levels';
 import { STREET_LENGTH } from './render/street';
 import { Scene } from './render/scene';
 import { CUTSCENE_LENGTH, BOSS_INTRO_LENGTH } from './render/cutscene';
+import { OFFICE_INTRO_LENGTH } from './render/office';
 import { drawNuggetPortrait } from './render/paint';
 import { Sound } from './audio/sound';
 import { Controls } from './input';
@@ -214,9 +215,11 @@ async function boot() {
     fadeIn();
   }
 
-  /** Out the front door: Uncle Gus drops in, then the boss fight starts. */
+  /** Level 1: out the front door, Uncle Gus drops in. Level 2: the Manager's Office security cameras,
+   * then the Manager walks in. Then the boss fight starts. */
   function playBossCutscene() {
     scene.bossCut.reset();
+    scene.officeCut.reset();
     lastCaption = '';
     mode = 'bossCutscene';
     controls.clear();
@@ -309,6 +312,7 @@ async function boot() {
 
   function setBossUi(on: boolean) {
     document.body.classList.toggle('boss', on);
+    document.querySelector('#boss-hud .boss-name')!.textContent = bossDef(state).name;
     $('boss-hud').hidden = !on;
     $('fire-btn').hidden = !on;
   }
@@ -511,9 +515,9 @@ async function boot() {
         break;
       case 'bossStart':
         setBossUi(true);
-        hud.banner('Uncle Gus!');
-        if (state.difficulty === 'easy') hud.toast(isTouch() ? 'Hold <b>SQUIRT</b>: on Easy the ketchup flies at Uncle Gus by itself!' : 'Hold <b>F</b> or the mouse button: on Easy the ketchup flies at Uncle Gus by itself!', '', 4000);
-        else hud.toast(isTouch() ? 'Turn to face Uncle Gus and hold <b>SQUIRT</b>!' : 'Turn to face Uncle Gus and hold <b>F</b> or the mouse button to squirt!', '', 4000);
+        hud.banner(`${bossDef(state).name}!`);
+        if (state.difficulty === 'easy') hud.toast(isTouch() ? `Hold <b>SQUIRT</b>: on Easy the ketchup flies at ${bossDef(state).the} by itself!` : `Hold <b>F</b> or the mouse button: on Easy the ketchup flies at ${bossDef(state).the} by itself!`, '', 4000);
+        else hud.toast(isTouch() ? `Turn to face ${bossDef(state).the} and hold <b>SQUIRT</b>!` : `Turn to face ${bossDef(state).the} and hold <b>F</b> or the mouse button to squirt!`, '', 4000);
         break;
       case 'squirt':
         sound.squirt();
@@ -556,7 +560,7 @@ async function boot() {
         break;
       case 'bossDown':
         sound.bossDown();
-        hud.toast('Uncle Gus is out of the game! You\'re free!', '', 3000);
+        hud.toast(state.level.id === 2 ? 'The Manager is out cold! The office is yours!' : 'Uncle Gus is out of the game! You\'re free!', '', 3000);
         $('fire-btn').hidden = true;
         break;
       case 'win': {
@@ -573,7 +577,7 @@ async function boot() {
         setTimeout(() => {
           if (mode !== 'ended') return;
           $('win-eyebrow').textContent = lv === 2 ? 'Employee of the month? Not today!' : 'Freedom!';
-          $('win-title').textContent = lv === 2 ? "You made it to the Manager's Office!" : 'You escaped!';
+          $('win-title').textContent = lv === 2 ? (state.boss ? 'You beat the Manager!' : "You made it to the Manager's Office!") : 'You escaped!';
           const sub = $('win-sub');
           sub.hidden = lv === 1 && !firstWin;
           sub.textContent = lv === 2
@@ -607,7 +611,9 @@ async function boot() {
         sound.gameOver();
         sound.stopMusic();
         mode = 'ended';
-        $('over-text').textContent = state.boss
+        $('over-text').textContent = state.boss && state.level.id === 2
+          ? 'The Manager got you! Keep moving, dodge the pink slips and jump away from the big stomp.'
+          : state.boss
           ? 'Uncle Gus got you! Keep moving, dodge the drumsticks and jump away from his belly slam.'
           : state.caughtBy === 'A shopper with a cart'
           ? 'A shopping cart ran you over one time too many. When a shopper shouts "!", step out of the way!'
@@ -629,7 +635,8 @@ async function boot() {
   function cutsceneFrame(dt: number) {
     const boss = mode === 'bossCutscene';
     const street = mode === 'street';
-    const cs = boss ? scene.bossCut : street ? scene.street : scene.cutscene;
+    const office = boss && state.level.id === 2;
+    const cs = office ? scene.officeCut : boss ? scene.bossCut : street ? scene.street : scene.cutscene;
     for (const e of cs.events) {
       if (e === 'gasp') sound.alert();
       else if (e === 'jump') sound.dash();
@@ -654,7 +661,7 @@ async function boot() {
         caption.classList.add('in');
       }
     }
-    bar.style.transform = `scaleX(${cs.t / (boss ? BOSS_INTRO_LENGTH : street ? STREET_LENGTH : CUTSCENE_LENGTH)})`;
+    bar.style.transform = `scaleX(${cs.t / (office ? OFFICE_INTRO_LENGTH : boss ? BOSS_INTRO_LENGTH : street ? STREET_LENGTH : CUTSCENE_LENGTH)})`;
     $('cutscene').style.setProperty('--fade', String(cs.fade));
     if (cs.done) endCutscene();
     void dt;
@@ -694,14 +701,14 @@ async function boot() {
   (window as unknown as { __nugget: unknown }).__nugget = {
     get state() { return state; },
     get mode() { return mode; },
-    get cutsceneTime() { return mode === 'bossCutscene' ? scene.bossCut.t : mode === 'street' ? scene.street.t : scene.cutscene.t; },
+    get cutsceneTime() { return mode === 'bossCutscene' ? (state.level.id === 2 ? scene.officeCut : scene.bossCut).t : mode === 'street' ? scene.street.t : scene.cutscene.t; },
     get level() { return level; },
     /** Pick a level as if from the menu (Level 2 must be unlocked, or ?level=2 used). */
     setLevel: (id: LevelId) => { if (id === 1 || level2Open) { level = id; syncLevels(); } return level; },
     start: () => start(),
     playCutscene,
     skipCutscene: endCutscene,
-    seekCutscene: (t: number) => { if (mode === 'bossCutscene') scene.bossCut.t = t; else if (mode === 'street') scene.street.t = t; else scene.cutscene.t = t; },
+    seekCutscene: (t: number) => { if (mode === 'bossCutscene') (state.level.id === 2 ? scene.officeCut : scene.bossCut).t = t; else if (mode === 'street') scene.street.t = t; else scene.cutscene.t = t; },
     /** Jump straight to the front door, as if every key had been found. */
     toFrontDoor: () => {
       level = 1;
@@ -709,6 +716,17 @@ async function boot() {
       for (const k of state.keys) { state.held.add(k.color); state.unlocked.add(k.color); }
       state.player.floor = 0;
       state.player.pos = { ...ENTRY };
+      state.status = 'bossIntro';
+      state.boss = makeBoss(state);
+      state.shots = [];
+      onEvent({ type: 'bossIntro' });
+    },
+    /** Level 2: jump into the Manager's Office, as if every key had been found. */
+    toOffice: () => {
+      if (mode !== 'game' || state.level.id !== 2) { level2Open = true; level = 2; syncLevels(); start(); }
+      for (const k of state.keys) { k.taken = true; state.held.add(k.color); state.unlocked.add(k.color); }
+      state.carts = [];
+      state.player.pos = { ...MANAGER.entry };
       state.status = 'bossIntro';
       state.boss = makeBoss(state);
       state.shots = [];

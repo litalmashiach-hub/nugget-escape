@@ -1,5 +1,5 @@
 import { currentObjective, DASH_COOLDOWN, type GameState } from '../game/state';
-import { BOTTLE_SIZE } from '../game/boss';
+import { BOTTLE_SIZE, bossDef } from '../game/boss';
 import { SECRETS, FEAST_RECHARGE } from '../game/secrets';
 import { KEY_INFO, KEY_ORDER, type KeyColor } from '../game/types';
 import { drawKey, drawNuggetPortrait, makeCanvas } from '../render/paint';
@@ -102,7 +102,7 @@ export class Hud {
       this.lastFloor = p.floor;
       $('hud-floor').textContent = map.def.name;
     }
-    const room = state.boss ? 'Front Garden' : map.roomAt(p.pos.x, p.pos.y)?.name ?? this.lastRoom;
+    const room = state.boss ? bossDef(state).place : map.roomAt(p.pos.x, p.pos.y)?.name ?? this.lastRoom;
     if (room !== this.lastRoom) {
       this.lastRoom = room;
       $('hud-room').textContent = room;

@@ -338,9 +338,10 @@ export const STORE: FloorDef[] = [
       f('officeDesk', 66, 4, 6, 1, 'hide'),
       f('bookshelf', 78, 1, 1, 4, 'solid'),
       f('trophyCase', 61, 1, 3, 1, 'solid'),
-      f('plant', 61, 14, 1, 1, 'solid'),
-      f('plant', 78, 14, 1, 1, 'solid'),
-      f('armchair', 75, 9, 2, 2, 'solid'),
+      // (the rest of the office stays clear: it's where the Manager boss fight happens)
+      f('plant', 64, 1, 1, 1, 'solid'),
+      f('plant', 77, 1, 1, 1, 'solid'),
+      f('armchair', 73, 1, 2, 2, 'solid'),
       // Sales floor: a long row of fruit and veg stands up top
       f('produce', 3, 12, 3, 2, 'hide', '#e74c3c'),
       f('produce', 10, 12, 3, 2, 'hide', '#f1c40f'),

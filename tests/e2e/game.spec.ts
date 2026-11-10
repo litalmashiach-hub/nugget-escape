@@ -291,8 +291,10 @@ test('Level 2: water spills make the nugget slide, and a shopper charges with a 
   await expect(page.locator('.toast').filter({ hasText: 'Slippery' })).toBeVisible({ timeout: 4000 });
   await page.keyboard.up('ArrowDown');
   // next to the green key from below: a shopper charges
-  await page.evaluate(() => { const s = (window as any).__nugget.state; s.player.slip = 0; s.player.pos = { x: 75.5, y: 48 }; s.player.invuln = 0; });
-  await expect(page.locator('.toast').filter({ hasText: 'cart is charging' })).toBeVisible({ timeout: 4000 });
+  await page.evaluate(() => { const s = (window as any).__nugget.state; s.player.slip = 0; s.player.pos = { x: 75.5, y: 48 }; s.player.invuln = 0;
+    // the slide may already have set off a shopper aimed at where the nugget was: start fresh
+    s.carts = []; s.lives = 3; for (const k of s.keys) k.rush = 'armed'; });
+  await expect(page.locator('.toast').filter({ hasText: 'cart is charging' }).last()).toBeVisible({ timeout: 4000 });
   expect(await page.evaluate(() => (window as any).__nugget.state.carts.length)).toBe(1);
   // standing still: run over
   await expect(page.locator('.toast').filter({ hasText: 'Run over by a shopping cart' })).toBeVisible({ timeout: 6000 });
@@ -300,12 +302,35 @@ test('Level 2: water spills make the nugget slide, and a shopper charges with a 
   expect(errors).toEqual([]);
 });
 
-test('the robot player gets through the grocery store into the Manager\'s Office', async ({ page }) => {
+test('Level 2: in the Manager\'s Office the security cameras play, the Manager walks in, and the boss fight starts', async ({ page }) => {
+  const errors = await open(page, '?level=2&autostart&seed=1');
+  await page.waitForFunction(() => (window as any).__nugget.state.status === 'playing');
+  await page.evaluate(() => (window as any).__nugget.toOffice());
+  expect(await page.evaluate(() => (window as any).__nugget.mode)).toBe('bossCutscene');
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(7.2));
+  await expect(page.locator('#cutscene-text')).toContainText('alive when they bought me');
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(14.5));
+  await expect(page.locator('#cutscene-who')).toHaveText('The Manager');
+  await expect(page.locator('#cutscene-text')).toContainText('snooping around my office');
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(18));
+  await expect(page.locator('#cutscene-text')).toContainText('not even working here');
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(20.8));
+  await expect(page.locator('#cutscene-text')).toHaveText('Whatever.');
+  await page.locator('#btn-skip').click();
+  await expect(page.locator('#boss-hud')).toBeVisible();
+  await expect(page.locator('#boss-hud .boss-name')).toHaveText('The Manager');
+  await expect(page.locator('#hud-objective .obj-text')).toHaveText('Squirt ketchup at the Manager!');
+  expect(await page.evaluate(() => (window as any).__nugget.state.status)).toBe('boss');
+  expect(errors).toEqual([]);
+});
+
+test('the robot player gets through the grocery store and beats the Manager', async ({ page }) => {
   test.setTimeout(120_000);
-  const errors = await open(page, '?level=2&autostart&nofamily&bot&speed=12&seed=1');
+  // on Easy, so the run checks the whole flow rather than the robot's boss-fight luck
+  const errors = await open(page, '?level=2&autostart&nofamily&bot&speed=12&seed=1&difficulty=easy');
   await expect.poll(async () => (await snap(page)).status, { timeout: 90_000, intervals: [250] }).toBe('won');
   await expect(page.locator('#screen-win')).toBeVisible({ timeout: 10_000 });
-  await expect(page.locator('#win-title')).toHaveText("You made it to the Manager's Office!");
+  await expect(page.locator('#win-title')).toHaveText('You beat the Manager!');
   await expect(page.locator('.key-slot.used')).toHaveCount(4);
   await expect(page.locator('#btn-next')).toBeHidden();
   await expect(page.locator('#win-secrets-box')).toBeHidden();

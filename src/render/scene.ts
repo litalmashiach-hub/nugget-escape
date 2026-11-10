@@ -8,7 +8,8 @@ import { buildFloor, type FloorView } from './world';
 import { buildFurniture } from './furniture';
 import { CART_REACH } from '../game/carts';
 import { SecretFx, FoodFx, SECRET_COLORS } from './secrets';
-import { NuggetModel, PersonModel, BossModel, drumstick, ketchupBottle, makeFamily, type FamilyModel } from './characters';
+import { NuggetModel, PersonModel, BossModel, drumstick, pinkSlip, ketchupBottle, makeFamily, type FamilyModel } from './characters';
+import { OfficeCutscene } from './office';
 import { Cutscene, BossCutscene, CAM_OFFSET } from './cutscene';
 import { bakeBubble, drawSymbol, makeCanvas } from './paint';
 import { LEVEL1, type LevelId } from '../game/levels';
@@ -17,7 +18,7 @@ import { StreetCutscene } from './street';
 const START = LEVEL1.start as Required<typeof LEVEL1.start>;
 import { INTRO_TIME, type Chaser, type GameEvent, type GameState } from '../game/state';
 import { castRay } from '../game/vision';
-import { ARENA, SLAM_RADIUS, autoAim } from '../game/boss';
+import { SLAM_RADIUS, autoAim, bossDef } from '../game/boss';
 import { KEY_INFO, type KeyColor } from '../game/types';
 
 export type View = 'game' | 'menu' | 'cutscene' | 'bossIntro' | 'street';
@@ -151,10 +152,13 @@ export class Scene {
   readonly camera = new THREE.PerspectiveCamera(40, 1, 0.1, 120);
   readonly cutscene = new Cutscene();
   readonly bossCut = new BossCutscene();
+  readonly officeCut = new OfficeCutscene();
   readonly street = new StreetCutscene();
   private secretFx = new SecretFx();
   private foodFx = new FoodFx();
   private gus = new BossModel();
+  private manager = new BossModel('manager');
+  private flyingSlips: THREE.Group[] = [];
   private ketchupBlobs: THREE.Mesh[] = [];
   private flyingSticks: THREE.Group[] = [];
   private slamRing: THREE.Mesh;
@@ -221,8 +225,15 @@ export class Scene {
     }
 
     for (const k of ['!', '?', 'yum'] as const) this.bubbleTex[k] = canvasTexture(bakeBubble(k));
-    this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.street.group, this.gus.root, this.secretFx.group, this.foodFx.group);
+    this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.street.group, this.gus.root, this.manager.root, this.officeCut.group, this.secretFx.group, this.foodFx.group);
     this.gus.root.visible = false;
+    this.manager.root.visible = false;
+    for (let i = 0; i < 16; i++) {
+      const sl = pinkSlip(1.3);
+      sl.visible = false;
+      this.flyingSlips.push(sl);
+      this.scene.add(sl);
+    }
     const blobMat = new THREE.MeshStandardMaterial({ color: '#e0201c', roughness: 0.25, emissive: '#7a0a08', emissiveIntensity: 0.5 });
     for (let i = 0; i < 24; i++) {
       const m = new THREE.Mesh(GEO.lowSphere, blobMat);
@@ -325,7 +336,9 @@ export class Scene {
     this.shake = 0;
     this.wonTime = 0;
     this.gus.fallen = 0;
+    this.manager.fallen = 0;
     this.bossCut.reset();
+    this.officeCut.reset();
     this.secretFx.reset();
   }
 
@@ -512,7 +525,11 @@ export class Scene {
     this.cutscene.group.visible = story && !street;
     this.street.group.visible = street;
     this.nugget.root.visible = !story;
-    this.gus.root.visible = !story && !!state.boss && p.floor === 0;
+    this.gus.root.visible = !story && !!state.boss && p.floor === 0 && state.level.id === 1;
+    this.manager.root.visible = !story && !!state.boss && state.level.id === 2;
+    // the security monitors live on the Manager's desk; the full-screen footage only in the cutscene
+    this.officeCut.group.visible = !story && state.level.id === 2;
+    if (!bossIntro) this.officeCut.hideTape();
     this.plate.visible = true;
     cutUniforms.uCutOn.value = story ? 0 : 1;
 
@@ -556,7 +573,7 @@ export class Scene {
     this.particles.update(dt);
 
     // Shadow-casting moonlight follows the camera focus
-    const focus = street ? this.street.focus : story ? new THREE.Vector3(17, 0, 4.5) : bossIntro ? new THREE.Vector3(15, 0, 24.5) : this.camTarget;
+    const focus = street ? this.street.focus : story ? new THREE.Vector3(17, 0, 4.5) : bossIntro ? (state.level.id === 2 ? this.officeCut.focus : new THREE.Vector3(15, 0, 24.5)) : this.camTarget;
     this.sun.position.set(focus.x - 7, 16, focus.z + 9);
     this.sun.target.position.copy(focus);
 
@@ -623,9 +640,17 @@ export class Scene {
 
   private renderBossIntro(state: GameState, dt: number) {
     for (const c of this.chasers.values()) { c.model.root.visible = false; c.bubble.visible = false; c.cone.visible = false; }
-    this.gus.root.visible = true;
-    cutUniforms.uCutOn.value = 0;
-    this.bossCut.update(dt, this.camera, this.time, this.nugget, this.gus);
+    if (state.level.id === 2) {
+      // inside the store: keep the wall cutaway on around the nugget
+      this.manager.root.visible = true;
+      this.officeCut.update(dt, this.camera, this.time, this.nugget, this.manager);
+      cutUniforms.uCutOn.value = 1;
+      cutUniforms.uPlayer.value.copy(this.officeCut.focus);
+    } else {
+      this.gus.root.visible = true;
+      cutUniforms.uCutOn.value = 0;
+      this.bossCut.update(dt, this.camera, this.time, this.nugget, this.gus);
+    }
     if (this.camera.aspect < 0.8) {
       const dir = this.camera.getWorldDirection(new THREE.Vector3());
       this.camera.position.addScaledVector(dir, -2.0);
@@ -639,9 +664,9 @@ export class Scene {
   private renderBossFight(state: GameState, dt: number, intro: boolean) {
     const b = state.boss;
     const fighting = !!b && !intro && state.player.floor === 0;
-    let ki = 0, di = 0;
+    let ki = 0, di = 0, si = 0;
     if (fighting) {
-      const g = this.gus;
+      const g = state.level.id === 2 ? this.manager : this.gus;
       g.root.position.set(b.pos.x, b.mode === 'jump' ? Math.sin(b.jump * Math.PI) * 2.6 : 0, b.pos.y);
       g.windup = b.mode === 'throwWindup' ? Math.min(1, g.windup + dt * 4) : Math.max(0, g.windup - dt * 6);
       g.crouch = b.mode === 'slamWindup' ? Math.min(1, g.crouch + dt * 3) : b.mode === 'recover' ? Math.max(0, g.crouch - dt * 1.5) : b.mode === 'jump' ? 0.3 : Math.max(0, g.crouch - dt * 4);
@@ -662,6 +687,11 @@ export class Scene {
           d.visible = true;
           d.position.set(s.pos.x, 0.6, s.pos.y);
           d.rotation.set(s.spin, s.spin * 0.7, 0);
+        } else if (s.kind === 'slip' && si < this.flyingSlips.length) {
+          const d = this.flyingSlips[si++];
+          d.visible = true;
+          d.position.set(s.pos.x, 0.7 + Math.sin(s.spin * 0.5) * 0.08, s.pos.y);
+          d.rotation.set(Math.sin(s.spin) * 0.4, s.spin * 0.8, Math.cos(s.spin * 0.7) * 0.3);
         }
       }
       const ring = b.target && (b.mode === 'slamWindup' || b.mode === 'jump');
@@ -696,6 +726,7 @@ export class Scene {
     }
     for (; ki < this.ketchupBlobs.length; ki++) this.ketchupBlobs[ki].visible = false;
     for (; di < this.flyingSticks.length; di++) this.flyingSticks[di].visible = false;
+    for (; si < this.flyingSlips.length; si++) this.flyingSlips[si].visible = false;
   }
 
   private renderGame(state: GameState, dt: number, fv: FloorView) {
@@ -765,7 +796,8 @@ export class Scene {
     let danger = 0;
     for (const c of state.chasers) {
       const cv = this.chasers.get(c.def.id)!;
-      const here = c.floor === p.floor;
+      // in the Manager boss fight the staff are left out on the shop floor
+      const here = c.floor === p.floor && !(state.boss && state.level.id === 2);
       cv.model.root.visible = here;
       cv.cone.visible = here;
       cv.bubble.visible = false;
@@ -796,8 +828,9 @@ export class Scene {
     // ------------------------------------------------ camera
     const target = new THREE.Vector3(nx, 0, nz);
     if (afterBoss) {
-      // frame both the nugget and Uncle Gus inside the garden
+      // frame both the nugget and the boss inside the arena
       const b = state.boss!;
+      const ARENA = bossDef(state).arena;
       target.set((nx + b.pos.x) / 2, 0, (nz + b.pos.y) / 2);
       target.x = Math.max(ARENA.x0 + 3, Math.min(ARENA.x1 - 3, target.x));
       target.z = Math.max(ARENA.y0 + 1.5, Math.min(ARENA.y1 - 2, target.z));
