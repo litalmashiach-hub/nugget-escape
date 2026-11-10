@@ -531,6 +531,14 @@ async function boot() {
       case 'slam':
         sound.thud();
         break;
+      case 'stamp':
+        sound.thud();
+        hud.toast(isTouch() ? '<b>FIRED!</b> Tap <b>DASH</b> to dash through the shock wave!' : '<b>FIRED!</b> Press <b>Space</b> to dash through the shock wave!', 'danger', 1800);
+        break;
+      case 'dodgeWave':
+        sound.refill();
+        hud.toast('Nice dash!', '', 900);
+        break;
       case 'refill':
         sound.refill();
         hud.toast('Ketchup bottle full!', '', 1400);

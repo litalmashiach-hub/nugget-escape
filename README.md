@@ -20,7 +20,7 @@ It opens with a street cutscene: the free nugget wanders down the street wonderi
 - **Water spills** (with yellow wet-floor signs) guard every key. Step in one and the nugget slides out of control, and the splash makes nearby staff turn to look. Find the dry way around.
 - **Shopping carts:** when you get close to a key, a shopper with a cart shouts "!" and charges straight at you. Step out of the way: getting run over costs a life.
 - Key chain: Green (far corner of the sales floor) → Cold Room → Orange → Stockroom → Purple → Bakery Kitchen → Gold → **Manager's Office**.
-- **The Manager:** in the office the nugget hops onto the desk and watches the security cameras: the footage shows it was a plain frozen nugget (no eyes, no smile) when it was bought. Then the Manager walks in ("You are not supposed to be here snooping around my office. I might just have to fire you!" "I'm a chicken nugget! I'm not even working here!" "Whatever.") and the boss fight starts: squirt ketchup at the Manager, dodge the flying pink slips and get out of the red ring before the big stomp.
+- **The Manager:** in the office the nugget hops onto the desk and watches the security cameras: the footage shows it was a plain frozen nugget (no eyes, no smile) when it was bought. Then the Manager walks in ("You are not supposed to be here snooping around my office. I might just have to fire you!" "I'm a chicken nugget! I'm not even working here!" "Whatever.") and the boss fight starts: squirt ketchup at the Manager, dodge the flying pink slips, get out of the red ring before the big stomp, and when the Manager lifts the giant **FIRED** stamp, **dash** (Space, Shift or the DASH button) right through its shock wave.
 
 ## Play on a phone
 

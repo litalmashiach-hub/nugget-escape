@@ -223,6 +223,21 @@ export function pinkSlip(scale = 1) {
   return g;
 }
 
+/** The Manager's giant rubber stamp, rubber side down: it says FIRED! */
+export function firedStamp() {
+  const b = builder(false, false);
+  const g = new THREE.Group();
+  g.add(cbox(b, 0, 0.0, 0, 0.95, 0.12, 0.62, '#c81d3a', { rough: 0.8 }));
+  g.add(cbox(b, 0, 0.12, 0, 0.85, 0.16, 0.54, '#5e3b22'));
+  g.add(cyl(b, 0, 0.28, 0, 0.09, 0.5, '#7a4a2a'));
+  g.add(ball(b, 0, 0.82, 0, 0.2, 0.2, 0.2, '#c81d3a', { rough: 0.4 }));
+  const label = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.18), new THREE.MeshBasicMaterial({ map: labelTexture('FIRED!', '#ffffff'), transparent: true }));
+  label.position.set(0, 0.2, 0.275);
+  g.add(label);
+  g.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+  return g;
+}
+
 function bucketTexture() {
   const c = document.createElement('canvas');
   c.width = 256;
@@ -268,6 +283,8 @@ export class BossModel {
   fallen = 0;
   flash = 0;
   chew = 0;
+  /** 0..1: both arms up over the head, lifting the FIRED stamp. */
+  lift = 0;
 
   constructor(readonly look: BossLook = 'gus') {
     const b = builder(true, false);
@@ -441,11 +458,12 @@ export class BossModel {
     this.body.position.y = (moving ? Math.abs(Math.cos(phase)) * 0.08 : Math.sin(time * 2) * 0.02) - crouch * 0.22;
     this.body.rotation.z = moving ? Math.sin(phase) * 0.06 : 0;
     // left arm hugs the bucket; right arm eats or winds up a throw
-    this.armL.rotation.set(-0.9, 0, -0.35);
+    this.armL.rotation.set(-0.9 - this.lift * 2.2, 0, -0.35 + this.lift * 0.2);
     const eat = Math.max(0, Math.sin(this.eat * Math.PI));
     this.armR.rotation.x = -0.4 - eat * 2.0 - this.windup * 2.6 + (this.windup > 0.95 ? 0 : 0);
     this.armR.rotation.z = 0.3 + eat * 0.3;
-    this.hand.visible = this.windup < 0.98;
+    this.hand.visible = this.windup < 0.98 && this.lift < 0.3;
+    if (this.lift > 0) { this.armR.rotation.x = -0.4 - this.lift * 2.6; this.armR.rotation.z = 0.3 - this.lift * 0.2; }
     const chew = this.chew > 0 ? Math.abs(Math.sin(time * 14)) : 0;
     this.mouth.scale.set(0.2, 0.05 + chew * 0.08 + eat * 0.1, 0.05);
     this.head.rotation.x = -eat * 0.25;
