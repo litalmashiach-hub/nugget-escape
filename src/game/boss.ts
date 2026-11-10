@@ -31,7 +31,16 @@ export const HURT_INVULN = 1.6;
 export const BOSS_DOWN_TIME = 2.6;
 const PLAYER_R = 0.28;
 
-export type BossMode = 'walk' | 'throwWindup' | 'slamWindup' | 'jump' | 'recover' | 'defeated';
+export type BossMode = 'walk' | 'throwWindup' | 'slamWindup' | 'jump' | 'recover' | 'stampWindup' | 'stamp' | 'defeated';
+
+/** A shock wave from the Manager's FIRED stamp: a ring that grows from where it landed. */
+export interface Wave {
+  x: number;
+  y: number;
+  r: number;
+  /** The ring has already gone past the nugget (it hit, or the nugget dashed through). */
+  done: boolean;
+}
 
 export interface Boss {
   pos: Vec;
@@ -49,6 +58,8 @@ export interface Boss {
   flash: number;
   walkPhase: number;
   attacks: number;
+  /** Shock waves spreading out from the stamp. */
+  waves: Wave[];
 }
 
 /** How fast homing ketchup turns toward Gus (radians per second, roughly). */
@@ -98,11 +109,13 @@ export interface BossDef {
   slam: string;
   /** Name of the place, for the HUD. */
   place: string;
+  /** The Manager's giant FIRED stamp: slams the floor and sends out a shock wave to dash through. */
+  stamp: boolean;
 }
 
 export const GUS: BossDef = {
   name: BOSS_NAME, the: BOSS_NAME, arena: ARENA, entry: ENTRY, start: BOSS_START,
-  shot: 'drumstick', throws: 'drumsticks', slam: 'belly slam', place: 'Front Garden',
+  shot: 'drumstick', throws: 'drumsticks', slam: 'belly slam', place: 'Front Garden', stamp: false,
 };
 
 /** The Manager's Office (Level 2), in store map coordinates: below the desk, inside the walls. */
@@ -111,8 +124,16 @@ export const OFFICE_ARENA: Arena = { x0: 61.3, x1: 78.7, y0: 5.3, y1: 15.7 };
 export const MANAGER: BossDef = {
   name: 'The Manager', the: 'the Manager', arena: OFFICE_ARENA,
   entry: { x: 69.5, y: 6.4 }, start: { x: 69.5, y: 11.6 },
-  shot: 'slip', throws: 'pink slips', slam: 'big stomp', place: "Manager's Office",
+  shot: 'slip', throws: 'pink slips', slam: 'big stomp', place: "Manager's Office", stamp: true,
 };
+
+/** How fast the stamp's shock wave spreads (tiles per second), and how far it goes. */
+export const WAVE_SPEED = 6;
+export const WAVE_MAX = 12;
+/** Half the thickness of the ring that hurts. */
+export const WAVE_BAND = 0.3;
+/** How long the Manager holds the stamp up before slamming it down. */
+export const STAMP_WINDUP = 1.0;
 
 /** The boss of the level being played. */
 export function bossDef(state: GameState): BossDef {
@@ -123,7 +144,7 @@ export function makeBoss(state: GameState): Boss {
   const hp = BOSS_HP[state.difficulty];
   return {
     pos: { ...bossDef(state).start }, facing: -Math.PI / 2, hp, maxHp: hp, mode: 'walk', timer: 1.2,
-    target: null, jumpFrom: null, jump: 0, flash: 0, walkPhase: 0, attacks: 0,
+    target: null, jumpFrom: null, jump: 0, flash: 0, walkPhase: 0, attacks: 0, waves: [],
   };
 }
 
@@ -189,10 +210,16 @@ export function updateBossFight(state: GameState, input: Input, dt: number) {
   if (len > 1) { mx /= len; my /= len; }
   p.moving = len > 0.1;
   p.hidden = false;
-  if (input.dash && p.dashCd <= 0 && p.moving) {
+  // In the boss fight a dash works standing still too: it goes the way the nugget faces.
+  if (input.dash && p.dashCd <= 0) {
     p.dashTime = 0.22;
     p.dashCd = 1.4;
     state.events.push({ type: 'dash' });
+  }
+  if (!p.moving && p.dashTime > 0) {
+    mx = Math.cos(p.facing);
+    my = Math.sin(p.facing);
+    p.moving = true;
   }
   if (p.moving) {
     const speed = 4.4 * (p.dashTime > 0 ? 2.1 : 1);
@@ -274,6 +301,7 @@ export function updateBossFight(state: GameState, input: Input, dt: number) {
         if (boss.hp <= 0) {
           boss.mode = 'defeated';
           boss.timer = BOSS_DOWN_TIME;
+          boss.waves = [];
           state.shots = state.shots.filter((o) => o.kind === 'ketchup');
           state.events.push({ type: 'bossDown' });
         }
@@ -286,7 +314,21 @@ export function updateBossFight(state: GameState, input: Input, dt: number) {
   state.shots = state.shots.filter((s) => s.life > 0);
   if (state.status !== 'boss') return;
 
-  // ------------------------------------------------ Uncle Gus
+  // ------------------------------------------------ stamp shock waves
+  for (const w of boss.waves) {
+    w.r += WAVE_SPEED * state.settings.chaseMult * dt;
+    if (w.done) continue;
+    const d = dist(w, p.pos);
+    if (Math.abs(d - w.r) < WAVE_BAND + PLAYER_R) {
+      // dashing (or still blinking after a hit) carries the nugget safely through the ring
+      if (p.dashTime > 0) { w.done = true; state.events.push({ type: 'dodgeWave' }); }
+      else if (p.invuln <= 0) { w.done = true; hurtPlayer(state); }
+    } else if (w.r > d + WAVE_BAND + PLAYER_R) w.done = true;
+  }
+  boss.waves = boss.waves.filter((w) => w.r < WAVE_MAX);
+  if (state.status !== 'boss') return;
+
+  // ------------------------------------------------ the boss
   const angry = boss.hp <= boss.maxHp / 2;
   const mult = state.settings.chaseMult;
   boss.timer -= dt;
@@ -304,7 +346,11 @@ export function updateBossFight(state: GameState, input: Input, dt: number) {
       if (dist(boss.pos, p.pos) < BOSS_RADIUS + PLAYER_R + 0.05) hurtPlayer(state);
       if (boss.timer <= 0) {
         boss.attacks++;
-        if (boss.attacks % 3 === 0) {
+        // Gus: throw, throw, slam. The Manager: throw, STAMP, throw, stomp.
+        if (def.stamp && boss.attacks % 4 === 2) {
+          boss.mode = 'stampWindup';
+          boss.timer = angry ? STAMP_WINDUP * 0.8 : STAMP_WINDUP;
+        } else if (def.stamp ? boss.attacks % 4 === 0 : boss.attacks % 3 === 0) {
           boss.mode = 'slamWindup';
           boss.timer = angry ? 0.6 : 0.8;
           boss.target = { x: p.pos.x, y: p.pos.y };
@@ -362,6 +408,24 @@ export function updateBossFight(state: GameState, input: Input, dt: number) {
       }
       break;
     }
+    case 'stampWindup':
+      // the giant stamp goes up over the Manager's head...
+      boss.facing = turn(boss.facing, angleTo(boss.pos, p.pos), dt * 5);
+      if (boss.timer <= 0) {
+        // ...and THUMPS down in front of them: FIRED!
+        const at = { x: boss.pos.x + Math.cos(boss.facing) * 0.9, y: boss.pos.y + Math.sin(boss.facing) * 0.9 };
+        boss.waves.push({ x: at.x, y: at.y, r: 0, done: false });
+        state.events.push({ type: 'stamp', x: at.x, y: at.y });
+        boss.mode = 'stamp';
+        boss.timer = 0.7;
+      }
+      break;
+    case 'stamp':
+      if (boss.timer <= 0) {
+        boss.mode = 'walk';
+        boss.timer = angry ? 1.3 : 1.7;
+      }
+      break;
     case 'recover':
       if (boss.timer <= 0) {
         boss.mode = 'walk';
@@ -454,6 +518,19 @@ export function bossBotInput(state: GameState): Input {
       mx += (s.vel.y / sp) * sgn * 2.5;
       my += (-s.vel.x / sp) * sgn * 2.5;
       dash = along < 1.2;
+    }
+  }
+  // a stamp shock wave coming: dash through it, toward the stamp
+  for (const w of boss.waves) {
+    if (w.done) continue;
+    const gap = dist(w, p.pos) - w.r;
+    if (gap > 0 && gap < 0.9) {
+      // straight at the stamp is quickest through the ring, but sideways when the Manager is close
+      const b = angleTo(p.pos, w) + (d < 3 ? Math.PI / 2 : 0);
+      mx = Math.cos(b);
+      my = Math.sin(b);
+      dash = true;
+      threat = true;
     }
   }
   const len = Math.hypot(mx, my) || 1;

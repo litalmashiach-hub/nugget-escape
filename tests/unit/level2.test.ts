@@ -102,10 +102,11 @@ describe('level 2: the grocery store', () => {
     expect(s.boss).toBeNull();
   });
 
-  it('the Manager throws pink slips and stomps, and everyone stays inside the office', () => {
+  it('the Manager throws pink slips, stamps and stomps, and everyone stays inside the office', () => {
     const s = createGame('normal', { level: 2, noFamily: true, seed: 4 });
     s.status = 'bossIntro' as GameState['status'];
     beginBossFight(s);
+    s.lives = 99; // stand still and take it, to see every attack
     const kinds = new Set<string>();
     const ev: string[] = [];
     for (let t = 0; t < 12 && s.status === 'boss'; t += DT) {
@@ -122,7 +123,56 @@ describe('level 2: the grocery store', () => {
     expect(kinds.has('slip')).toBe(true);
     expect(kinds.has('drumstick')).toBe(false);
     expect(ev).toContain('slam');
-    expect(s.lives).toBeLessThan(3);
+    expect(ev).toContain('stamp');
+    expect(s.lives).toBeLessThan(99);
+  });
+
+  /** A Manager fight where the very next attack is the FIRED stamp. */
+  function stampFight() {
+    const s = createGame('normal', { level: 2, noFamily: true, seed: 4 });
+    s.status = 'bossIntro' as GameState['status'];
+    beginBossFight(s);
+    s.boss!.attacks = 1;
+    s.boss!.timer = 0;
+    const ev: string[] = [];
+    for (let t = 0; t < 2 && !ev.includes('stamp'); t += DT) { update(s, idle, DT); ev.push(...s.events.map((e) => e.type)); }
+    expect(ev).toContain('stamp');
+    expect(s.boss!.mode).toBe('stamp');
+    expect(s.boss!.waves).toHaveLength(1);
+    return s;
+  }
+
+  it('the Manager slams the FIRED stamp, and its shock wave hurts a nugget that stands still', () => {
+    const s = stampFight();
+    const ev: string[] = [];
+    for (let t = 0; t < 1.5; t += DT) { update(s, idle, DT); ev.push(...s.events.map((e) => e.type)); }
+    expect(ev).toContain('hurt');
+    expect(ev).not.toContain('dodgeWave');
+    expect(s.lives).toBe(2);
+  });
+
+  it('dashing through the shock wave is safe', () => {
+    const s = stampFight();
+    const ev: string[] = [];
+    for (let t = 0; t < 1.5; t += DT) {
+      const w = s.boss!.waves[0];
+      const gap = w ? Math.hypot(w.x - s.player.pos.x, w.y - s.player.pos.y) - w.r : 9;
+      // dash (standing still: it goes the way the nugget faces, toward the Manager) just before it arrives
+      update(s, { mx: 0, my: 0, dash: gap > 0 && gap < 0.7 }, DT);
+      ev.push(...s.events.map((e) => e.type));
+    }
+    expect(ev).toContain('dodgeWave');
+    expect(ev).not.toContain('hurt');
+    expect(s.lives).toBe(3);
+  });
+
+  it('Uncle Gus has no stamp', () => {
+    const s = createGame('normal', { noFamily: true, seed: 4 });
+    s.status = 'bossIntro' as GameState['status'];
+    beginBossFight(s);
+    const ev: string[] = [];
+    for (let t = 0; t < 30 && s.status === 'boss'; t += DT) { update(s, bossBotInput(s), DT); ev.push(...s.events.map((e) => e.type)); }
+    expect(ev).not.toContain('stamp');
   });
 
   it('losing every life to the Manager says who did it', () => {

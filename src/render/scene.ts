@@ -3,12 +3,12 @@
  * the current floor of the house, the nugget, the family with their vision cones,
  * keys, doors and effects. Gameplay itself lives in src/game and knows nothing about this.
  */
-import { THREE, cutUniforms, canvasTexture, glowTexture, GEO } from './kit';
+import { THREE, cutUniforms, canvasTexture, glowTexture, labelTexture, GEO } from './kit';
 import { buildFloor, type FloorView } from './world';
 import { buildFurniture } from './furniture';
 import { CART_REACH } from '../game/carts';
 import { SecretFx, FoodFx, SECRET_COLORS } from './secrets';
-import { NuggetModel, PersonModel, BossModel, drumstick, pinkSlip, ketchupBottle, makeFamily, type FamilyModel } from './characters';
+import { NuggetModel, PersonModel, BossModel, drumstick, pinkSlip, firedStamp, faceAngle, ketchupBottle, makeFamily, type FamilyModel } from './characters';
 import { OfficeCutscene } from './office';
 import { Cutscene, BossCutscene, CAM_OFFSET } from './cutscene';
 import { bakeBubble, drawSymbol, makeCanvas } from './paint';
@@ -18,7 +18,7 @@ import { StreetCutscene } from './street';
 const START = LEVEL1.start as Required<typeof LEVEL1.start>;
 import { INTRO_TIME, type Chaser, type GameEvent, type GameState } from '../game/state';
 import { castRay } from '../game/vision';
-import { SLAM_RADIUS, autoAim, bossDef } from '../game/boss';
+import { SLAM_RADIUS, WAVE_BAND, WAVE_MAX, autoAim, bossDef } from '../game/boss';
 import { KEY_INFO, type KeyColor } from '../game/types';
 
 export type View = 'game' | 'menu' | 'cutscene' | 'bossIntro' | 'street';
@@ -162,6 +162,10 @@ export class Scene {
   private ketchupBlobs: THREE.Mesh[] = [];
   private flyingSticks: THREE.Group[] = [];
   private slamRing: THREE.Mesh;
+  /** The Manager's FIRED stamp, its shock wave rings and the marks it leaves on the floor. */
+  private stamp = firedStamp();
+  private waveRings: THREE.Mesh[] = [];
+  private stampMarks: { mesh: THREE.Mesh; age: number }[] = [];
   /** Ketchup bottles to grab when the nugget's bottle is empty. */
   private pickups: { root: THREE.Group; bottle: THREE.Group; glow: THREE.Sprite }[] = [];
   /** Shows where the next squirt will go. */
@@ -256,6 +260,27 @@ export class Scene {
     this.slamRing.renderOrder = 3;
     this.slamRing.visible = false;
     this.scene.add(this.slamRing);
+    this.stamp.scale.setScalar(1.25);
+    this.stamp.visible = false;
+    this.scene.add(this.stamp);
+    for (let i = 0; i < 4; i++) {
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.1, 0.2, 64), new THREE.MeshBasicMaterial({ color: '#ff5a3a', transparent: true, opacity: 0.75, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.renderOrder = 3;
+      ring.visible = false;
+      ring.userData.r = -1;
+      this.waveRings.push(ring);
+      this.scene.add(ring);
+    }
+    const markTex = labelTexture('FIRED!', '#d0103a');
+    for (let i = 0; i < 3; i++) {
+      const mark = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.42), new THREE.MeshBasicMaterial({ map: markTex, transparent: true, depthWrite: false }));
+      mark.rotation.x = -Math.PI / 2;
+      mark.renderOrder = 2;
+      mark.visible = false;
+      this.stampMarks.push({ mesh: mark, age: 99 });
+      this.scene.add(mark);
+    }
 
     for (let i = 0; i < 3; i++) {
       const root = new THREE.Group();
@@ -337,6 +362,8 @@ export class Scene {
     this.wonTime = 0;
     this.gus.fallen = 0;
     this.manager.fallen = 0;
+    this.manager.lift = 0;
+    for (const m of this.stampMarks) m.age = 99;
     this.bossCut.reset();
     this.officeCut.reset();
     this.secretFx.reset();
@@ -483,6 +510,22 @@ export class Scene {
           const a = (i / 40) * Math.PI * 2;
           this.particles.emit(e.x + Math.cos(a) * 0.8, 0.1, e.y + Math.sin(a) * 0.8, { vx: Math.cos(a) * 4, vy: 0.8 + Math.random(), vz: Math.sin(a) * 4, grav: 4, life: 0.7, size: 0.12, color: '#c9b48a' });
         }
+        break;
+      case 'stamp': {
+        this.shake = 0.4;
+        for (let i = 0; i < 36; i++) {
+          const a = (i / 36) * Math.PI * 2;
+          this.particles.emit(e.x + Math.cos(a) * 0.5, 0.08, e.y + Math.sin(a) * 0.5, { vx: Math.cos(a) * 5, vy: 0.6 + Math.random(), vz: Math.sin(a) * 5, grav: 4, life: 0.6, size: 0.1, color: i % 2 ? '#ff5a3a' : '#ffd0c0' });
+        }
+        // the stamp leaves a big red FIRED! on the floor
+        const m = this.stampMarks.reduce((a, b) => (b.age > a.age ? b : a));
+        m.age = 0;
+        m.mesh.position.set(e.x, 0.07, e.y);
+        m.mesh.rotation.z = -(state.boss ? faceAngle(state.boss.facing) : 0);
+        break;
+      }
+      case 'dodgeWave':
+        for (let i = 0; i < 10; i++) this.particles.emit(p.x, 0.3, p.y, { vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 2, vz: (Math.random() - 0.5) * 3, grav: 6, life: 0.6, size: 0.06, color: '#ffe066' });
         break;
       case 'hurt':
         this.shake = 0.25;
@@ -694,10 +737,34 @@ export class Scene {
           d.rotation.set(Math.sin(s.spin) * 0.4, s.spin * 0.8, Math.cos(s.spin * 0.7) * 0.3);
         }
       }
-      const ring = b.target && (b.mode === 'slamWindup' || b.mode === 'jump');
-      this.slamRing.visible = !!ring;
-      if (ring) {
-        this.slamRing.position.set(b.target!.x, 0.05, b.target!.y);
+      // the FIRED stamp: lifted over the Manager's head, then thumped down in front
+      g.lift = b.mode === 'stampWindup' ? Math.min(1, g.lift + dt * 4) : b.mode === 'stamp' ? Math.max(0.35, g.lift - dt * 10) : Math.max(0, g.lift - dt * 4);
+      const fx = Math.cos(b.facing), fz = Math.sin(b.facing);
+      const stampSpot = { x: b.pos.x + fx * 0.9, y: b.pos.y + fz * 0.9 };
+      this.stamp.visible = b.mode === 'stampWindup' || b.mode === 'stamp';
+      if (this.stamp.visible) {
+        const up = b.mode === 'stampWindup' ? g.lift : 0;
+        this.stamp.position.set(b.pos.x + fx * (0.9 - up * 0.6), up * (2.6 + Math.sin(this.time * 20) * 0.04), b.pos.y + fz * (0.9 - up * 0.6));
+        this.stamp.rotation.set(0, faceAngle(b.facing), 0);
+      }
+      // shock wave rings
+      this.waveRings.forEach((ring, i) => {
+        const w = b.waves[i];
+        ring.visible = !!w;
+        if (!w) return;
+        if (Math.abs(ring.userData.r - w.r) > 0.02) {
+          ring.geometry.dispose();
+          ring.geometry = new THREE.RingGeometry(Math.max(0, w.r - WAVE_BAND), w.r + WAVE_BAND, 72);
+          ring.userData.r = w.r;
+        }
+        ring.position.set(w.x, 0.06, w.y);
+        (ring.material as THREE.MeshBasicMaterial).opacity = 0.85 * (1 - w.r / WAVE_MAX);
+      });
+      const warnAt = b.mode === 'stampWindup' ? stampSpot : b.target && (b.mode === 'slamWindup' || b.mode === 'jump') ? b.target : null;
+      const ring = !!warnAt;
+      this.slamRing.visible = ring;
+      if (warnAt) {
+        this.slamRing.position.set(warnAt.x, 0.05, warnAt.y);
         const pulse = 1 + Math.sin(this.time * 18) * 0.04;
         this.slamRing.scale.set(pulse, pulse, 1);
       }
@@ -721,12 +788,19 @@ export class Scene {
       });
     } else {
       this.slamRing.visible = false;
+      this.stamp.visible = false;
+      for (const r of this.waveRings) r.visible = false;
       this.aimLine.visible = false;
       for (const pk of this.pickups) pk.root.visible = false;
     }
     for (; ki < this.ketchupBlobs.length; ki++) this.ketchupBlobs[ki].visible = false;
     for (; di < this.flyingSticks.length; di++) this.flyingSticks[di].visible = false;
     for (; si < this.flyingSlips.length; si++) this.flyingSlips[si].visible = false;
+    for (const m of this.stampMarks) {
+      m.age += dt;
+      m.mesh.visible = fighting && m.age < 4;
+      (m.mesh.material as THREE.MeshBasicMaterial).opacity = Math.min(1, (4 - m.age) / 1.5);
+    }
   }
 
   private renderGame(state: GameState, dt: number, fv: FloorView) {

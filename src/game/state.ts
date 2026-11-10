@@ -56,6 +56,8 @@ export type GameEvent =
   | { type: 'bossDown' }
   | { type: 'throw' }
   | { type: 'slam'; x: number; y: number }
+  | { type: 'stamp'; x: number; y: number }
+  | { type: 'dodgeWave' }
   | { type: 'hurt' }
   | { type: 'refill' }
   | { type: 'bottle'; x: number; y: number }
@@ -379,7 +381,7 @@ export function currentObjective(state: GameState): Objective | null {
     if (state.unlocked.has(color)) {
       if (color === 'gold' && state.boss) {
         const b = bossDef(state);
-        return { color, action: 'boss', text: `Squirt ketchup at ${b.the}!`, hint: `${state.difficulty === 'easy' ? `Squirt away: on Easy the ketchup flies at ${b.the} by itself.` : `Face ${b.the} and squirt: the ketchup goes the way you are facing.`} Dodge the ${b.throws}, stay out of the red ring, and when the bottle is empty grab the new one that appears.` };
+        return { color, action: 'boss', text: `Squirt ketchup at ${b.the}!`, hint: `${state.difficulty === 'easy' ? `Squirt away: on Easy the ketchup flies at ${b.the} by itself.` : `Face ${b.the} and squirt: the ketchup goes the way you are facing.`} Dodge the ${b.throws}, stay out of the red ring, and when the bottle is empty grab the new one that appears.${b.stamp ? ' When the Manager slams the FIRED stamp, DASH through the shock wave!' : ''}` };
       }
       if (color === 'gold' && goal) {
         return { color, action: 'escape', text: `Get into the ${goal.room.name}!`, hint: `The door is open. Run into the ${goal.room.name}!` };
