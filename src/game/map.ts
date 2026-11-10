@@ -20,6 +20,7 @@ export class FloorMap {
   private readonly solid: Uint8Array;
   private readonly hide: Uint8Array;
   private readonly tall: Uint8Array;
+  private readonly spill: Uint8Array;
   private readonly doorAt = new Map<number, Door>();
 
   constructor(def: FloorDef) {
@@ -31,6 +32,7 @@ export class FloorMap {
     this.solid = new Uint8Array(n);
     this.hide = new Uint8Array(n);
     this.tall = new Uint8Array(n);
+    this.spill = new Uint8Array(n);
     this.room = new Int16Array(n).fill(-1);
 
     for (let y = 0; y < this.h; y++) {
@@ -59,6 +61,9 @@ export class FloorMap {
           else this.hide[y * this.w + x] = 1;
         }
     }
+    for (const [sx, sy, sw, sh] of def.spills ?? [])
+      for (let y = sy; y < sy + sh; y++)
+        for (let x = sx; x < sx + sw; x++) if (this.inBounds(x, y)) this.spill[y * this.w + x] = 1;
     def.rooms.forEach((r, i) => this.flood(r.seed[0], r.seed[1], i));
   }
 
@@ -92,6 +97,10 @@ export class FloorMap {
   isHide(x: number, y: number) {
     return this.inBounds(x, y) && this.hide[y * this.w + x] === 1;
   }
+  /** A slippery water spill: the nugget slides across, staff walk around it. */
+  isSpill(x: number, y: number) {
+    return this.inBounds(x, y) && this.spill[y * this.w + x] === 1;
+  }
   door(x: number, y: number): Door | undefined {
     return this.doorAt.get(y * this.w + x);
   }
@@ -116,7 +125,7 @@ export class FloorMap {
   /** Can a family member stand on this tile? They can't crawl under furniture or take stairs. */
   walkableForFamily(x: number, y: number, unlocked: ReadonlySet<KeyColor>) {
     if (!this.walkableForPlayer(x, y, unlocked)) return false;
-    return !this.isHide(x, y) && !this.isStairs(x, y);
+    return !this.isHide(x, y) && !this.isStairs(x, y) && !this.isSpill(x, y);
   }
 
   /** Blocks sight: walls, closed doors and tall store shelves. */

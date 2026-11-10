@@ -75,7 +75,9 @@ export interface RoomDef {
 
 export type FamilyKind = 'dad' | 'mom' | 'sister' | 'grandma' | 'brother' | 'dog'
   // grocery store employees (Level 2)
-  | 'cashier' | 'stocker' | 'butcher' | 'clerk';
+  | 'cashier' | 'stocker' | 'butcher' | 'clerk'
+  // a shopper pushing a cart (Level 2 hazard, not a chaser)
+  | 'shopper';
 
 export interface FamilyDef {
   id: string;
@@ -102,6 +104,8 @@ export interface FloorDef {
   arriveFromBelow?: [number, number];
   arriveFromAbove?: [number, number];
   lights: [number, number][];
+  /** Slippery water spills as [x, y, w, h] tile rectangles (Level 2). */
+  spills?: [number, number, number, number][];
 }
 
 export type Difficulty = 'easy' | 'normal' | 'hard';

@@ -167,6 +167,7 @@ body.touch .hud-bottom { bottom: max(180px, calc(env(safe-area-inset-bottom, 0px
 .levels button.on { border-color: var(--gold); background: rgba(245,185,66,.14); }
 .levels button:disabled { opacity: .55; cursor: not-allowed; }
 .levels button:not(:disabled) .lv-lock { display: none; }
+.cheat-note { margin: 8px 0 0; font-weight: 900; color: #7ee081; }
 .next-note { margin: 12px 0 0; font-weight: 800; color: var(--cream-dim); text-align: center; }
 .play-btn {
   font-family: var(--font-display); font-size: 28px; letter-spacing: 0.03em; padding: 14px 48px; border-radius: 18px; border: 0;
