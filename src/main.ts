@@ -385,6 +385,39 @@ async function boot() {
   controls.bindTouch($('stick'), $('stick-knob'), $('dash-btn'));
   controls.bindFire($('fire-btn'));
   controls.bindMouse($('stage'));
+  // Secret code for testing: typing "shalevisbest" unlocks Level 2 without beating Level 1.
+  // (On phones: tap the game title 5 times to type it in.)
+  const CHEAT = 'shalevisbest';
+  let typed = '';
+  const tryCode = (code: string) => {
+    if (code.toLowerCase().replace(/\s+/g, '') !== CHEAT) return false;
+    unlockLevel2();
+    level2Open = true;
+    syncLevels();
+    sound.unlock();
+    sound.secret();
+    const note = $('cheat-note');
+    note.textContent = 'Secret code accepted: Level 2 unlocked!';
+    note.hidden = false;
+    return true;
+  };
+  window.addEventListener('keydown', (e) => {
+    if (e.key.length !== 1) return;
+    typed = (typed + e.key.toLowerCase()).slice(-CHEAT.length);
+    if (typed === CHEAT) { typed = ''; tryCode(CHEAT); }
+  });
+  let logoTaps = 0, logoTimer = 0;
+  document.querySelector('h1.logo')?.addEventListener('click', () => {
+    logoTaps++;
+    clearTimeout(logoTimer);
+    logoTimer = window.setTimeout(() => (logoTaps = 0), 1500);
+    if (logoTaps >= 5) {
+      logoTaps = 0;
+      const code = window.prompt('Secret code?');
+      if (code) tryCode(code);
+    }
+  });
+
   window.addEventListener('keydown', (e) => {
     if (mode === 'menu' && e.code === 'Enter') playCutscene();
     else if ((mode === 'cutscene' || mode === 'bossCutscene' || mode === 'street') && (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter')) {
@@ -502,6 +535,21 @@ async function boot() {
         sound.pop();
         hud.toast('A ketchup bottle appeared! Grab it!', '', 2000);
         break;
+      case 'slip':
+        sound.whoosh();
+        hud.toast('Whoa! Slippery! The splash made some noise...', 'danger', 1800);
+        break;
+      case 'rush':
+        sound.alert();
+        hud.toast('A shopper with a cart is charging at you! Dodge!', 'danger', 2000);
+        break;
+      case 'cartCrash':
+        sound.thud();
+        break;
+      case 'bumped':
+        sound.caught();
+        hud.toast(state.lives > 0 ? `Ouch! Run over by a shopping cart! ${state.lives} ${state.lives === 1 ? 'life' : 'lives'} left.` : 'Ouch! Run over by a shopping cart!', 'danger', 2200);
+        break;
       case 'hurt':
         sound.caught();
         hud.toast(state.lives > 0 ? `Ouch! ${state.lives} ${state.lives === 1 ? 'life' : 'lives'} left.` : 'Ouch!', 'danger', 1800);
@@ -561,6 +609,8 @@ async function boot() {
         mode = 'ended';
         $('over-text').textContent = state.boss
           ? 'Uncle Gus got you! Keep moving, dodge the drumsticks and jump away from his belly slam.'
+          : state.caughtBy === 'A shopper with a cart'
+          ? 'A shopping cart ran you over one time too many. When a shopper shouts "!", step out of the way!'
           : state.level.shelf
           ? `${state.caughtBy ?? 'The staff'} put you back on the shelf for good. Hide under the fruit stands and shopping carts!`
           : `${state.caughtBy ?? 'The family'} caught you one time too many. Try sneaking and hiding under furniture!`;

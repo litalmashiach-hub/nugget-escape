@@ -42,8 +42,9 @@ export function botInput(state: GameState): Input {
     gx = best.x; gy = best.y;
   }
 
+  // stay off the slippery spills
   const walk = (x: number, y: number) =>
-    (x === gx && y === gy) || (map.walkableForPlayer(x, y, state.unlocked) && !map.isStairs(x, y));
+    (x === gx && y === gy) || (map.walkableForPlayer(x, y, state.unlocked) && !map.isStairs(x, y) && !map.isSpill(x, y));
   const path = findPath(map.w, map.h, walk, Math.floor(p.pos.x), Math.floor(p.pos.y), gx, gy);
   if (!path) return { mx: 0, my: 0, dash: false };
 
@@ -58,7 +59,29 @@ export function botInput(state: GameState): Input {
   }
   const dx = tx - p.pos.x, dy = ty - p.pos.y;
   const len = Math.hypot(dx, dy) || 1;
-  return { mx: dx / len, my: dy / len, dash: false };
+  return dodgeCarts(state, { mx: dx / len, my: dy / len, dash: false });
+}
+
+/** A cart is coming: step sideways out of its lane (dashing if it is close). */
+function dodgeCarts(state: GameState, input: Input): Input {
+  const p = state.player;
+  const map = state.maps[p.floor];
+  for (const c of state.carts) {
+    if (c.mode === 'stop') continue;
+    const rx = p.pos.x - c.pos.x, ry = p.pos.y - c.pos.y;
+    const along = rx * c.dir.x + ry * c.dir.y;
+    const side = rx * -c.dir.y + ry * c.dir.x;
+    if (along < 0 || Math.abs(side) > 1.3) continue;
+    // pick the side with room to step into
+    const sgn = side >= 0 ? 1 : -1;
+    const free = (s: number) => {
+      const x = p.pos.x - c.dir.y * s * 0.9, y = p.pos.y + c.dir.x * s * 0.9;
+      return map.walkableForPlayer(Math.floor(x), Math.floor(y), state.unlocked) && !map.isSpill(Math.floor(x), Math.floor(y));
+    };
+    const s = free(sgn) ? sgn : free(-sgn) ? -sgn : sgn;
+    return { mx: -c.dir.y * s, my: c.dir.x * s, dash: c.mode === 'charge' && along < 4 && p.dashCd <= 0 };
+  }
+  return input;
 }
 
 /**

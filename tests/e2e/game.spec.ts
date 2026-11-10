@@ -255,14 +255,48 @@ test('Level 2: a store employee puts the nugget back on the shelf', async ({ pag
     const s = (window as any).__nugget.state;
     s.chasers = s.chasers.filter((c: any) => c.def.id === 'dan');
     const dan = s.chasers[0];
-    dan.pos = { x: 26.5, y: 19.5 }; dan.facing = 0; dan.lookBase = 0; dan.pause = 5;
-    s.player.pos = { x: 29, y: 21.5 };
+    dan.pos = { x: 33.5, y: 19.5 }; dan.facing = 0; dan.lookBase = 0; dan.pause = 5;
+    s.player.pos = { x: 36, y: 19.5 };
   });
   await expect(page.locator('.toast.danger').filter({ hasText: 'put you back on the shelf' })).toBeVisible({ timeout: 8000 });
   // after the caught moment, it reappears on the frozen food shelf with one life fewer
   await expect.poll(async () => { const s = await snap(page); return `${s.lives} ${s.status}`; }, { timeout: 8000 }).toBe('2 playing');
   const s = await snap(page);
-  expect(Math.abs(s.x - 27.5) + Math.abs(s.y - 15.6)).toBeLessThan(1.5);
+  expect(Math.abs(s.x - 37.5) + Math.abs(s.y - 17.6)).toBeLessThan(1.5);
+  expect(errors).toEqual([]);
+});
+
+test('typing the secret code "shalevisbest" unlocks Level 2 without beating Level 1', async ({ page }) => {
+  const errors = await open(page);
+  await expect(page.locator('#level-2')).toBeDisabled();
+  await page.keyboard.type('shalevisbest');
+  await expect(page.locator('#level-2')).toBeEnabled();
+  await expect(page.locator('#cheat-note')).toHaveText('Secret code accepted: Level 2 unlocked!');
+  await page.locator('#level-2').click();
+  await page.locator('#btn-play').click();
+  expect(await page.evaluate(() => (window as any).__nugget.mode)).toBe('street');
+  // remembered after a reload
+  await page.reload();
+  await page.waitForFunction(() => (window as any).__nugget?.mode !== undefined);
+  await expect(page.locator('#level-2')).toBeEnabled();
+  expect(errors).toEqual([]);
+});
+
+test('Level 2: water spills make the nugget slide, and a shopper charges with a cart near a key', async ({ page }) => {
+  const errors = await open(page, '?level=2&autostart&nofamily&seed=1');
+  await page.waitForFunction(() => (window as any).__nugget.state.status === 'playing');
+  // just above the spill by the green key: walk down into it
+  await page.evaluate(() => { (window as any).__nugget.state.player.pos = { x: 43.5, y: 20.3 }; });
+  await page.keyboard.down('ArrowDown');
+  await expect(page.locator('.toast').filter({ hasText: 'Slippery' })).toBeVisible({ timeout: 4000 });
+  await page.keyboard.up('ArrowDown');
+  // next to the green key from below: a shopper charges
+  await page.evaluate(() => { const s = (window as any).__nugget.state; s.player.slip = 0; s.player.pos = { x: 44.5, y: 26 }; s.player.invuln = 0; });
+  await expect(page.locator('.toast').filter({ hasText: 'cart is charging' })).toBeVisible({ timeout: 4000 });
+  expect(await page.evaluate(() => (window as any).__nugget.state.carts.length)).toBe(1);
+  // standing still: run over
+  await expect(page.locator('.toast').filter({ hasText: 'Run over by a shopping cart' })).toBeVisible({ timeout: 6000 });
+  expect((await snap(page)).lives).toBe(2);
   expect(errors).toEqual([]);
 });
 

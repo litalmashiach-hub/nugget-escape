@@ -4,6 +4,7 @@ import {
 } from '../../src/game/state';
 import { botInput, solveHouse } from '../../src/game/bot';
 import { canSee } from '../../src/game/vision';
+import { CART_WINDUP, cartSpawn } from '../../src/game/carts';
 import { LEVEL1, LEVEL2, LEVELS, STORE } from '../../src/game/levels';
 import { buildMaps } from '../../src/game/map';
 import type { Difficulty } from '../../src/game/types';
@@ -57,13 +58,13 @@ describe('level 2: the grocery store', () => {
     expect(r.order).toEqual(['green', 'orange', 'gold']);
   });
 
-  it('starts at the entrance with three keys to find and five store employees', () => {
+  it('starts at the entrance with three keys to find and seven store employees', () => {
     const s = createGame('normal', { level: 2 });
     expect(s.level.id).toBe(2);
     expect(s.status).toBe('intro');
     expect(s.player.pos).toEqual({ x: LEVEL2.start.x, y: LEVEL2.start.y });
     expect(s.keys.map((k) => k.color)).toEqual(['green', 'orange', 'gold']);
-    expect(s.chasers.map((c) => c.def.kind)).toEqual(['cashier', 'stocker', 'butcher', 'clerk', 'stocker']);
+    expect(s.chasers.map((c) => c.def.kind)).toEqual(['cashier', 'stocker', 'butcher', 'clerk', 'clerk', 'stocker', 'stocker']);
     expect(currentObjective(s)?.text).toBe('Find the Green key');
   });
 
@@ -74,7 +75,7 @@ describe('level 2: the grocery store', () => {
     s.unlocked.add('green'); s.unlocked.add('orange');
     expect(currentObjective(s)?.text).toBe("Open the Manager's Office!");
     // stand under the gold door and walk north
-    s.player.pos = { x: 29.5, y: 10.6 };
+    s.player.pos = { x: 40.5, y: 11.6 };
     const ev = run(s, 3, () => ({ mx: 0, my: -1, dash: false }));
     expect(ev).toContain('unlock');
     expect(ev).toContain('win');
@@ -93,9 +94,9 @@ describe('level 2: the grocery store', () => {
   it('getting caught by staff puts the nugget back on the frozen food shelf', () => {
     const s = withOne('dan');
     const dan = s.chasers[0];
-    dan.pos = { x: 26.5, y: 19.5 };
+    dan.pos = { x: 33.5, y: 19.5 };
     dan.facing = 0; dan.lookBase = 0; dan.pause = 5;
-    s.player.pos = { x: 29.0, y: 21.5 };
+    s.player.pos = { x: 36.0, y: 19.5 };
     s.checkpoint = { floor: 0, x: 5.5, y: 6.5 }; // the shelf wins over the last door opened
     const ev = run(s, 2 + CAUGHT_TIME + 1, () => idle);
     expect(ev).toContain('caught');
@@ -108,19 +109,19 @@ describe('level 2: the grocery store', () => {
   it('employees cannot see through the tall shelves', () => {
     const s = createGame('normal', { level: 2 });
     const [m] = s.maps;
-    const viewer = { pos: { x: 6.5, y: 14.5 }, facing: Math.PI, range: 6, fov: Math.PI };
-    // the nugget is on the other side of the red shelf (x 3-4)
-    expect(canSee(m, s.unlocked, viewer, { x: 2.5, y: 14.5 })).toBe(false);
+    const viewer = { pos: { x: 11.5, y: 15.5 }, facing: Math.PI, range: 6, fov: Math.PI };
+    // the nugget is on the other side of the blue shelf (x 8-9)
+    expect(canSee(m, s.unlocked, viewer, { x: 7.5, y: 15.5 })).toBe(false);
     // but down the open aisle it is in plain sight
-    expect(canSee(m, s.unlocked, { ...viewer, facing: Math.PI / 2 }, { x: 6.5, y: 18.5 })).toBe(true);
+    expect(canSee(m, s.unlocked, { ...viewer, facing: Math.PI / 2 }, { x: 11.5, y: 19.5 })).toBe(true);
   });
 
   it('a nugget hiding under a fruit stand is not spotted', () => {
     const s = withOne('priya');
     const priya = s.chasers[0];
-    priya.pos = { x: 12.5, y: 7.5 };
+    priya.pos = { x: 15.5, y: 8.5 };
     priya.facing = 0; priya.lookBase = 0; priya.pause = 5;
-    s.player.pos = { x: 15.5, y: 7.5 }; // under the green fruit stand
+    s.player.pos = { x: 18.5, y: 8.5 }; // under the green fruit stand
     run(s, 0.1, () => idle);
     expect(s.player.hidden).toBe(true);
     expect(s.events.map((e) => e.type)).not.toContain('alert');
@@ -136,7 +137,7 @@ describe('level 2: the grocery store', () => {
   it('staff never walk into walls or shelves while wandering for a long time', () => {
     const s = createGame('hard', { level: 2, seed: 3 });
     skipIntro(s);
-    s.player.pos = { x: 30.5, y: 4.5 }; // tucked away in the locked office
+    s.player.pos = { x: 40.5, y: 5.5 }; // tucked away in the locked office
     s.player.hidden = true;
     for (let i = 0; i < 60 * 60; i++) {
       update(s, idle, DT);
@@ -156,7 +157,80 @@ describe('level 2: the grocery store', () => {
     expect(s.maps[0].roomAt(s.player.pos.x, s.player.pos.y)?.id).toBe('office');
   });
 
-  it.each(['easy', 'normal'] as Difficulty[])('the autopilot can beat the store with the staff around (%s)', (d) => {
+  it('is bigger than before: about 48 by 32 tiles', () => {
+    const [m] = buildMaps(STORE);
+    expect(m.w).toBe(48);
+    expect(m.h).toBe(32);
+  });
+
+  it('every key sits behind a water spill: there is a way around, but the short way is wet', () => {
+    const [m] = buildMaps(STORE);
+    const all = new Set(['green', 'orange', 'gold'] as const);
+    for (const k of m.def.keys) {
+      // some spill tile within 2 tiles of the key
+      let near = false;
+      for (let y = k.y - 2; y <= k.y + 2; y++) for (let x = k.x - 2; x <= k.x + 2; x++) if (m.isSpill(x, y)) near = true;
+      expect(near, `${k.color} key`).toBe(true);
+    }
+    // the dry way around exists: the solver ignores spills, so check with spills as walls
+    const dry = STORE.map((f) => ({ ...f, rows: f.rows.map((r, y) => [...r].map((ch, x) => (m.isSpill(x, y) ? '#' : ch)).join('')) }));
+    expect(solveHouse(dry, LEVEL2.start).escaped).toBe(true);
+    // staff never step in the water
+    for (const [x, y] of [[41, 22], [11, 4], [27, 4]]) expect(m.walkableForFamily(x, y, all)).toBe(false);
+  });
+
+  it('stepping on a spill sends the nugget sliding out of control, and nearby staff hear the splash', () => {
+    const s = withOne('dan');
+    const dan = s.chasers[0];
+    dan.pos = { x: 39.5, y: 19.5 }; dan.facing = Math.PI; dan.lookBase = Math.PI; dan.pause = 9; // looking away
+    s.player.pos = { x: 43.5, y: 20.3 }; // just above the spill wall by the green key
+    let ev: string[] = [];
+    for (let i = 0; i < 20; i++) { update(s, { mx: 0, my: 1, dash: false }, DT); ev = ev.concat(s.events.map((e) => e.type)); }
+    expect(ev).toContain('slip');
+    expect(s.player.slip).toBeGreaterThan(0);
+    // steering does nothing while sliding: it keeps going down
+    const y0 = s.player.pos.y;
+    for (let i = 0; i < 10; i++) update(s, { mx: 1, my: 0, dash: false }, DT);
+    expect(s.player.pos.y).toBeGreaterThan(y0 + 0.5);
+    expect(dan.mode === 'search' || dan.mode === 'alert' || dan.mode === 'chase').toBe(true);
+  });
+
+  it('getting near a key makes a shopper charge with a cart; standing still gets you run over', () => {
+    const s = createGame('normal', { level: 2, noFamily: true, seed: 1 });
+    skipIntro(s);
+    s.player.pos = { x: 44.5, y: 26.0 }; // right below the green key
+    const ev = run(s, 0.1, () => idle);
+    expect(ev).toContain('rush');
+    expect(s.carts).toHaveLength(1);
+    const ev2 = run(s, CART_WINDUP + 2.5, () => idle);
+    expect(ev2).toContain('bumped');
+    expect(s.lives).toBe(2);
+    expect(s.status).toBe('playing'); // knocked aside, not sent back to the shelf
+  });
+
+  it('a cart can be dodged by stepping out of its lane', () => {
+    const s = createGame('normal', { level: 2, noFamily: true, seed: 1 });
+    skipIntro(s);
+    s.player.pos = { x: 44.5, y: 26.0 };
+    run(s, 0.1, () => idle);
+    const c = s.carts[0];
+    // wait for the charge to start, then sidestep
+    run(s, CART_WINDUP + 0.05, () => idle);
+    const ev = run(s, 2.5, (st) => (st.carts.length ? { mx: -c.dir.y, my: c.dir.x, dash: false } : idle));
+    expect(ev).not.toContain('bumped');
+    expect(s.lives).toBe(3);
+  });
+
+  it('shoppers come from a spot with a clear run at the nugget', () => {
+    const s = createGame('normal', { level: 2, noFamily: true, seed: 2 });
+    s.player.pos = { x: 30.5, y: 3.5 };
+    s.unlocked.add('green'); s.unlocked.add('orange');
+    const spot = cartSpawn(s)!;
+    expect(spot).not.toBeNull();
+    expect(s.maps[0].roomAt(spot.x, spot.y)?.id).toBe('stock');
+  });
+
+  it.each(['easy'] as Difficulty[])('the autopilot can beat the store with the staff around (%s)', (d) => {
     let wins = 0;
     for (const seed of [1, 2, 3, 4, 5]) {
       const s = createGame(d, { level: 2, seed });

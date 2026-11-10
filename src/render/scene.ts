@@ -5,6 +5,8 @@
  */
 import { THREE, cutUniforms, canvasTexture, glowTexture, GEO } from './kit';
 import { buildFloor, type FloorView } from './world';
+import { buildFurniture } from './furniture';
+import { CART_REACH } from '../game/carts';
 import { SecretFx, FoodFx, SECRET_COLORS } from './secrets';
 import { NuggetModel, PersonModel, BossModel, drumstick, ketchupBottle, makeFamily, type FamilyModel } from './characters';
 import { Cutscene, BossCutscene, CAM_OFFSET } from './cutscene';
@@ -174,6 +176,8 @@ export class Scene {
   private hemi = new THREE.HemisphereLight('#c9d3ff', '#5a4632', 1.1);
   private lamps: THREE.PointLight[] = [];
   private bubbleTex: Record<string, THREE.Texture> = {};
+  /** Shoppers with carts (Level 2), reused from a small pool. */
+  private cartViews: { root: THREE.Group; shopper: PersonModel; bubble: THREE.Sprite }[] = [];
   private camTarget = new THREE.Vector3();
   private camReady = false;
   private shake = 0;
@@ -429,6 +433,20 @@ export class Scene {
       case 'win':
         this.confetti(p.x, p.y);
         break;
+      case 'slip':
+        for (let i = 0; i < 22; i++) {
+          const a = Math.random() * Math.PI * 2, sp = 0.8 + Math.random() * 1.8;
+          this.particles.emit(e.x, 0.1, e.y, { vx: Math.cos(a) * sp, vy: 1.2 + Math.random() * 2, vz: Math.sin(a) * sp, grav: 8, life: 0.7, size: 0.06, color: '#9fdcff' });
+        }
+        break;
+      case 'cartCrash':
+        this.shake = Math.max(this.shake, 0.1);
+        for (let i = 0; i < 14; i++) this.particles.emit(e.x, 0.4, e.y, { vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 2, vz: (Math.random() - 0.5) * 3, grav: 8, life: 0.7, size: 0.07, color: ['#e8424a', '#f5c518', '#58c13f', '#3d7df0'][i % 4] });
+        break;
+      case 'bumped':
+        this.shake = 0.2;
+        for (let i = 0; i < 20; i++) this.particles.emit(p.x, 0.3, p.y, { vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 3, vz: (Math.random() - 0.5) * 3, grav: 9, life: 0.9, size: 0.05, color: '#d99a3a' });
+        break;
       case 'dash':
         for (let i = 0; i < 10; i++) this.particles.emit(p.x, 0.1, p.y, { vx: (Math.random() - 0.5) * 2, vy: 0.4, vz: (Math.random() - 0.5) * 2, life: 0.45, size: 0.1, color: '#fff0c0' });
         break;
@@ -533,6 +551,7 @@ export class Scene {
       this.secretFx.update(state, dt, this.time, (x, y, z, color) => this.particles.emit(x, y, z, { vy: 0.4, life: 0.9, size: 0.045, color }));
     } else this.secretFx.group.visible = false;
     if (!story) this.renderBossFight(state, dt, bossIntro);
+    this.renderCarts(state, dt, !story && !bossIntro);
 
     this.particles.update(dt);
 
@@ -542,6 +561,39 @@ export class Scene {
     this.sun.target.position.copy(focus);
 
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private renderCarts(state: GameState, dt: number, show: boolean) {
+    const carts = show ? state.carts : [];
+    while (this.cartViews.length < carts.length) {
+      const root = new THREE.Group();
+      const shopper = new PersonModel('shopper');
+      const cart = buildFurniture({ kind: 'cart', x: 0, y: 0, w: 1, h: 1, block: 'solid' });
+      // the cart model faces +z in local space; put it in front of the shopper
+      cart.group.position.set(0.5, 0, CART_REACH + 0.5);
+      cart.group.rotation.y = Math.PI; // handle toward the shopper
+      cart.group.scale.setScalar(1.1);
+      const bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.bubbleTex['!'], depthTest: false }));
+      bubble.renderOrder = 10;
+      bubble.scale.setScalar(0.55);
+      bubble.position.y = 2.3;
+      root.add(shopper.root, cart.group, bubble);
+      root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+      this.scene.add(root);
+      this.cartViews.push({ root, shopper, bubble });
+    }
+    this.cartViews.forEach((v, i) => {
+      const c = carts[i];
+      v.root.visible = !!c;
+      if (!c) return;
+      v.root.position.set(c.pos.x, 0, c.pos.y);
+      // the whole group turns: shopper and cart face the way they are going
+      v.root.rotation.y = Math.PI / 2 - c.facing;
+      v.shopper.armPose = { l: -1.2, r: -1.2 }; // both hands on the handle
+      v.shopper.animate(null, c.mode === 'charge', c.walkPhase, dt);
+      v.shopper.root.rotation.y = 0;
+      v.bubble.visible = c.mode === 'windup' || (c.mode === 'charge' && Math.floor(this.time * 6) % 2 === 0);
+    });
   }
 
   private renderStreet(dt: number) {

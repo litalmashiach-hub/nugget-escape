@@ -338,6 +338,8 @@ export function buildFloor(map: FloorMap, outsideKind: 'garden' | 'parking' = 'g
   }
   group.add(yard.group);
 
+  if (map.def.spills?.length) group.add(buildSpills(map));
+
   const lights: [number, number][] = [...map.def.lights];
   return { id, group, doors, hides, lights };
 }
@@ -387,4 +389,46 @@ function storefront(yard: ReturnType<typeof builder>, map: FloorMap, R: () => nu
   yard.group.add(sign);
   // welcome mat inside
   box(yard, ex + 0.3, 0.005, H - 2.4, 3.4, 0.02, 1.2, '#2e9e5b', { rough: 1 });
+}
+
+/** Shiny water puddles over the spill tiles, each spill with a yellow wet-floor sign. */
+function buildSpills(map: FloorMap) {
+  const g = new THREE.Group();
+  const water = new THREE.MeshStandardMaterial({
+    color: '#8fd3ff', roughness: 0.04, metalness: 0.35, transparent: true, opacity: 0.72,
+    emissive: '#2a7ab8', emissiveIntensity: 0.35, depthWrite: false,
+  });
+  const disc = new THREE.CircleGeometry(0.5, 20);
+  const R = rng(map.def.id * 7 + 3);
+  for (const [sx, sy, sw, sh] of map.def.spills ?? []) {
+    for (let y = sy; y < sy + sh; y++)
+      for (let x = sx; x < sx + sw; x++)
+        for (let k = 0; k < 2; k++) {
+          const m = new THREE.Mesh(disc, water);
+          m.rotation.x = -Math.PI / 2;
+          m.rotation.z = R() * Math.PI;
+          m.scale.set(0.95 + R() * 0.5, 0.75 + R() * 0.45, 1);
+          m.position.set(x + 0.5 + (R() - 0.5) * 0.35, 0.012 + k * 0.002, y + 0.5 + (R() - 0.5) * 0.35);
+          m.renderOrder = 1;
+          g.add(m);
+        }
+    // a little splash of droplets
+    const b = builder(false, false);
+    for (let i = 0; i < sw * sh * 2; i++)
+      ball(b, sx + R() * sw, 0.02, sy + R() * sh, 0.08, 0.02, 0.08, '#cfeeff', { rough: 0.05, metal: 0.3 });
+    // yellow "wet floor" A-frame sign on the first spill tile
+    const sign = builder(false, false);
+    for (const t of [-0.32, 0.32]) {
+      const pane = box(sign, -0.18, 0, -0.025, 0.36, 0.62, 0.05, '#f5c518', { rough: 0.5 });
+      pane.rotation.x = t;
+      pane.position.z += t * 0.25;
+      const stripe = box(sign, -0.15, 0.36, -0.03, 0.3, 0.08, 0.06, '#1d1d1d');
+      stripe.rotation.x = t;
+      stripe.position.z += t * 0.25;
+    }
+    sign.group.position.set(sx + 0.5, 0, sy + 0.5);
+    sign.group.rotation.y = R() * Math.PI;
+    g.add(b.group, sign.group);
+  }
+  return g;
 }

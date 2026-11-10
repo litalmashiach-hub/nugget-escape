@@ -194,9 +194,13 @@ export class Hud {
           continue;
         }
         const r = map.room[y * map.w + x];
-        ctx.fillStyle = map.isStairs(x, y) ? '#f5b94299' : tints[r % tints.length];
+        ctx.fillStyle = map.isSpill(x, y) ? '#5fb7e8dd' : map.isStairs(x, y) ? '#f5b94299' : tints[r % tints.length];
         ctx.fillRect(x * s, y * s, s + 0.5, s + 0.5);
       }
+    for (const c of state.carts) {
+      ctx.fillStyle = '#f5a623';
+      ctx.beginPath(); ctx.arc(c.pos.x * s, c.pos.y * s, s * 0.6, 0, Math.PI * 2); ctx.fill();
+    }
     for (const c of state.chasers) {
       if (c.floor !== p.floor) continue;
       ctx.fillStyle = c.mode === 'chase' || c.mode === 'alert' ? '#ff4d5a' : '#ffffffcc';

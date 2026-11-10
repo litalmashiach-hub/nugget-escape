@@ -1,5 +1,6 @@
 import { SECRETS, touchingSecret, closestPoint, FEAST_TIME, FEAST_RECHARGE, type SecretId } from './secrets';
 import { LEVELS, type LevelDef, type LevelId } from './levels';
+import { updateCarts, type Cart } from './carts';
 import { buildMaps, type FloorMap } from './map';
 import { findPath } from './path';
 import { canSee, angleDiff } from './vision';
@@ -18,6 +19,10 @@ export const DASH_COOLDOWN = 1.6;
 export const INTRO_TIME = 1.3;
 export const CAUGHT_TIME = 1.7;
 export const INVULN_TIME = 2.2;
+/** Water spills: how long a slide lasts, how fast it is (times walking speed), and how far the splash is heard. */
+export const SLIP_TIME = 0.75;
+export const SLIP_SPEED = 1.5;
+export const SPLASH_RANGE = 6.5;
 
 export interface Input {
   mx: number;
@@ -53,7 +58,11 @@ export type GameEvent =
   | { type: 'slam'; x: number; y: number }
   | { type: 'hurt' }
   | { type: 'refill' }
-  | { type: 'bottle'; x: number; y: number };
+  | { type: 'bottle'; x: number; y: number }
+  | { type: 'slip'; x: number; y: number }
+  | { type: 'rush'; x: number; y: number }
+  | { type: 'cartCrash'; x: number; y: number }
+  | { type: 'bumped' };
 
 export type ChaserMode = 'patrol' | 'alert' | 'chase' | 'search' | 'return' | 'feast';
 
@@ -101,6 +110,9 @@ export interface Player {
   /** Stairs ignore the nugget right after arriving until the player lets go or turns. */
   stairsArmed: boolean;
   arriveDir: Vec;
+  /** Sliding across a water spill: seconds left and the direction of the slide. */
+  slip: number;
+  slipDir: Vec;
 }
 
 export interface KeyItem {
@@ -109,6 +121,8 @@ export interface KeyItem {
   x: number;
   y: number;
   taken: boolean;
+  /** Level 2: a shopper's cart charges the first time the nugget comes close. */
+  rush: 'armed' | 'used';
 }
 
 export type Status = 'intro' | 'playing' | 'caught' | 'bossIntro' | 'boss' | 'won' | 'gameover';
@@ -176,6 +190,8 @@ export interface GameState {
   refill: number;
   /** Full ketchup bottles lying in the garden while the nugget's bottle is empty. */
   bottles: Bottle[];
+  /** Level 2: shoppers charging with their carts. */
+  carts: Cart[];
 }
 
 const makeChaser = (def: FamilyDef, floor: number): Chaser => ({
@@ -221,11 +237,13 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
       walkPhase: 0,
       fireCd: 0,
       stairsArmed: true,
+      slip: 0,
+      slipDir: { x: 0, y: 0 },
       arriveDir: { x: 0, y: 0 },
     },
     rand: makeRandom(opts.seed ?? Math.floor(Math.random() * 2 ** 31)),
     chasers: opts.noFamily ? [] : floors.flatMap((fl) => fl.family.map((d) => makeChaser(d, fl.id))),
-    keys: floors.flatMap((fl) => fl.keys.map((k) => ({ ...k, x: k.x + 0.5, y: k.y + 0.5, floor: fl.id, taken: false }))),
+    keys: floors.flatMap((fl) => fl.keys.map((k) => ({ ...k, x: k.x + 0.5, y: k.y + 0.5, floor: fl.id, taken: false, rush: 'armed' as const }))),
     held: new Set(),
     unlocked: new Set(),
     lives: settings.lives,
@@ -248,6 +266,7 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
     ketchup: 0,
     refill: 0,
     bottles: [],
+    carts: [],
   };
 }
 
@@ -423,6 +442,7 @@ export function update(state: GameState, input: Input, dt: number) {
   updatePlayer(state, input, dt);
   if (state.status !== 'playing') return;
   for (const c of state.chasers) updateChaser(state, c, dt);
+  if (state.status === 'playing' && state.level.carts) updateCarts(state, dt);
 }
 
 /** True once every easter egg is found and the nugget rain is charged. */
@@ -521,6 +541,8 @@ function respawn(state: GameState) {
   p.pos = { x: back.x, y: back.y };
   p.invuln = INVULN_TIME;
   p.dashTime = 0;
+  p.slip = 0;
+  state.carts = [];
   for (const c of state.chasers) if (c.floor === p.floor) Object.assign(c, makeChaser(c.def, c.floor));
   if (state.feastTime > 0) for (const c of state.chasers) { c.mode = 'feast'; c.path = []; c.timer = 0; }
   state.status = 'playing';
@@ -549,6 +571,17 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
       my = 0;
       p.moving = false;
     }
+  }
+
+  // Sliding on a spill: no steering until the slide runs out (or hits something).
+  if (p.slip > 0) {
+    p.slip -= dt;
+    const walk = (x: number, y: number) => map.walkableForPlayer(x, y, state.unlocked);
+    const sp = PLAYER_SPEED * SLIP_SPEED * Math.max(0.35, Math.min(1, p.slip / SLIP_TIME + 0.35));
+    if (!moveCircle(walk, p.pos, p.slipDir.x * sp * dt, p.slipDir.y * sp * dt, PLAYER_RADIUS)) p.slip = 0;
+    p.facing += dt * 13; // spinning
+    mx = 0; my = 0;
+    p.moving = false;
   }
 
   if (input.dash && p.dashCd <= 0 && p.moving) {
@@ -600,6 +633,26 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
 
   const tx = Math.floor(p.pos.x), ty = Math.floor(p.pos.y);
   p.hidden = map.isHide(tx, ty);
+
+  // Stepping onto a water spill: whoosh!
+  if (p.slip <= 0 && p.moving && map.isSpill(tx, ty)) {
+    const l = Math.hypot(mx, my) || 1;
+    p.slip = SLIP_TIME;
+    p.slipDir = { x: mx / l, y: my / l };
+    p.dashTime = 0;
+    state.events.push({ type: 'slip', x: p.pos.x, y: p.pos.y });
+    // the splash is loud: staff close by turn to look
+    for (const c of state.chasers) {
+      if (c.floor !== p.floor || Math.hypot(c.pos.x - p.pos.x, c.pos.y - p.pos.y) > SPLASH_RANGE) continue;
+      if (c.mode === 'patrol' || c.mode === 'return' || c.mode === 'search') {
+        c.mode = 'search';
+        c.timer = 1.6;
+        c.path = [];
+        c.lookBase = Math.atan2(p.pos.y - c.pos.y, p.pos.x - c.pos.x);
+        c.facing = c.lookBase;
+      }
+    }
+  }
 
   // Level 2: made it into the Manager's Office
   const goal = goalRoom(state);

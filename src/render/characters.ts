@@ -385,6 +385,7 @@ const LOOKS: Record<Exclude<FamilyKind, 'dog'>, Look> = {
   stocker: { shirt: '#5b8bd6', pants: '#3b3b4f', skin: '#c68642', hair: '#1d1d1d', scale: 1.02, extra: '#2e9e5b' },
   butcher: { shirt: '#ffffff', pants: '#3b3b4f', skin: '#f1c27d', hair: '#8a5a36', scale: 1.08, extra: '#e8e8e8' },
   clerk: { shirt: '#e86f7a', pants: '#2c3e66', skin: '#8d5524', hair: '#141010', scale: 0.95, extra: '#2e9e5b' },
+  shopper: { shirt: '#f5a623', pants: '#4a5a8a', skin: '#f1c27d', hair: '#c0392b', scale: 1.0, extra: '#ffffff' },
 };
 
 const STAFF = new Set(['cashier', 'stocker', 'butcher', 'clerk']);
@@ -524,6 +525,14 @@ export class PersonModel {
         this.head.add(cbox(b, 0, -0.045, 0.18, 0.12, 0.03, 0.02, hair)); // mustache
         break;
       }
+      case 'shopper':
+        // curly red hair and a headband: in a big hurry
+        for (let i = 0; i < 7; i++) {
+          const a = (i / 7) * Math.PI * 2;
+          this.head.add(ball(b, Math.cos(a) * 0.12, 0.12 + Math.sin(a * 2) * 0.02, Math.sin(a) * 0.12 - 0.03, 0.17, 0.17, 0.17, hair));
+        }
+        this.head.add(cbox(b, 0, 0.12, 0, 0.37, 0.05, 0.37, L.extra!));
+        break;
       case 'clerk':
         this.head.add(ball(b, 0, 0.08, -0.03, 0.4, 0.3, 0.4, hair));
         this.head.add(ball(b, 0, 0.08, -0.2, 0.2, 0.2, 0.2, hair)); // puff

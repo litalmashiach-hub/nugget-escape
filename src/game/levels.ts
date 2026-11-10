@@ -244,118 +244,161 @@ export const START = { floor: 0, x: 16.5, y: 6.6, plate: { x: 17, y: 3.5 } };
 // ================================================================ Level 2: the grocery store
 
 /**
- * Key chain: green (on the sales floor, by the deli) -> Cold Room -> orange -> Stockroom
- *   -> gold -> Manager's Office (the goal).
+ * Key chain: green (by the bakery) -> Cold Room -> orange -> Stockroom -> gold
+ *   -> Manager's Office (the goal).
  * Shelves and racks are tall: the employees can't see through them.
+ * Every key sits behind a slippery water spill: step on one and the nugget slides
+ * out of control (and makes a splash the staff can hear), so go around.
  */
 export const STORE: FloorDef[] = [
   {
     id: 0,
     name: 'FreshMart',
     rows: [
-      '####################################',
-      '#...........#...........#..........#',
-      '#...........#...........#..........#',
-      '#...........#...........#..........#',
-      '#...........#...........#..........#',
-      '#####g###########o#######..........#',
-      '#.......................#..........#',
-      '#.......................#..........#',
-      '#.......................#..........#',
-      '#.......................#####f######',
-      '#..................................#',
-      '#..................................#',
-      '#..................................#',
-      '#..................................#',
-      '#..................................#',
-      '#..................................#',
-      '#..................................#',
-      '#..................................#',
-      '#..................................#',
-      '#..................................#',
-      '#..................................#',
-      '#..................................#',
-      '#..................................#',
-      '####################################',
+      '################################################',
+      '#...............#...............#..............#',
+      '#...............#...............#..............#',
+      '#...............#...............#..............#',
+      '#...............#...............#..............#',
+      '#...............#...............#..............#',
+      '########g###############o########..............#',
+      '#...............................#..............#',
+      '#...............................#..............#',
+      '#...............................#..............#',
+      '#...............................########f#######',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '#..............................................#',
+      '################################################',
     ],
     rooms: [
-      { id: 'cold', name: 'Cold Room', seed: [8, 2], style: 'concrete', wall: '#bfe3f2', door: 'green' },
-      { id: 'stock', name: 'Stockroom', seed: [16, 2], style: 'concrete', wall: '#cdb999', door: 'orange' },
-      { id: 'office', name: "Manager's Office", seed: [30, 5], style: 'officeCarpet', wall: '#d9c8ef', door: 'gold' },
-      { id: 'sales', name: 'Sales Floor', seed: [12, 19], style: 'storeTile', wall: '#f3eedd' },
+      { id: 'cold', name: 'Cold Room', seed: [5, 3], style: 'concrete', wall: '#bfe3f2', door: 'green' },
+      { id: 'stock', name: 'Stockroom', seed: [20, 3], style: 'concrete', wall: '#cdb999', door: 'orange' },
+      { id: 'office', name: "Manager's Office", seed: [39, 6], style: 'officeCarpet', wall: '#d9c8ef', door: 'gold' },
+      { id: 'sales', name: 'Sales Floor', seed: [12, 28], style: 'storeTile', wall: '#f3eedd' },
     ],
     furniture: [
       // Cold Room: walk-in freezers and stacked crates
-      f('freezer', 1, 1, 4, 1, 'solid', '#5fb7e8'),
-      f('freezer', 7, 1, 4, 1, 'solid', '#5fb7e8'),
+      f('freezer', 1, 1, 6, 1, 'solid', '#5fb7e8'),
+      f('freezer', 9, 1, 6, 1, 'solid', '#5fb7e8'),
       f('pallet', 1, 3, 2, 2, 'hide'),
+      f('pallet', 5, 3, 2, 1, 'hide'),
       // Stockroom
-      f('rack', 13, 1, 4, 1, 'solid'),
-      f('rack', 19, 1, 5, 1, 'solid'),
-      f('boxes', 13, 3, 2, 2, 'solid'),
-      f('pallet', 19, 3, 2, 1, 'hide'),
+      f('rack', 17, 1, 6, 1, 'solid'),
+      f('rack', 25, 1, 7, 1, 'solid'),
+      f('boxes', 17, 4, 2, 2, 'solid'),
+      f('pallet', 21, 3, 2, 1, 'hide'),
       // Manager's Office
-      f('rug', 27, 3, 6, 4, 'none', '#6a5acd'),
-      f('officeDesk', 28, 2, 4, 1, 'hide'),
-      f('bookshelf', 34, 1, 1, 3, 'solid'),
-      f('trophyCase', 25, 1, 2, 1, 'solid'),
-      f('plant', 25, 8, 1, 1, 'solid'),
-      f('armchair', 33, 6, 2, 2, 'solid'),
+      f('rug', 35, 3, 9, 5, 'none', '#6a5acd'),
+      f('officeDesk', 37, 3, 5, 1, 'hide'),
+      f('bookshelf', 46, 1, 1, 3, 'solid'),
+      f('trophyCase', 33, 1, 2, 1, 'solid'),
+      f('plant', 33, 9, 1, 1, 'solid'),
+      f('armchair', 44, 7, 2, 2, 'solid'),
       // Sales floor: fruit and veg up top
-      f('produce', 1, 7, 2, 2, 'hide', '#e74c3c'),
-      f('produce', 8, 7, 3, 2, 'hide', '#f1c40f'),
-      f('produce', 15, 7, 3, 2, 'hide', '#58c13f'),
-      f('cart', 21, 7, 1, 1, 'hide'),
+      f('produce', 2, 8, 3, 2, 'hide', '#e74c3c'),
+      f('produce', 11, 8, 3, 2, 'hide', '#f1c40f'),
+      f('produce', 18, 8, 3, 2, 'hide', '#58c13f'),
+      f('produce', 25, 8, 2, 2, 'hide', '#f68b2a'),
+      f('cart', 30, 8, 1, 1, 'hide'),
       // Aisles (tall shelves)
-      f('shelf', 3, 11, 2, 7, 'solid', '#e8424a'),
-      f('shelf', 8, 11, 2, 7, 'solid', '#3d7df0'),
-      f('shelf', 13, 11, 2, 7, 'solid', '#f68b2a'),
-      f('shelf', 18, 11, 2, 7, 'solid', '#9b5de5'),
+      f('shelf', 3, 13, 2, 8, 'solid', '#e8424a'),
+      f('shelf', 8, 13, 2, 8, 'solid', '#3d7df0'),
+      f('shelf', 13, 13, 2, 8, 'solid', '#f68b2a'),
+      f('shelf', 18, 13, 2, 8, 'solid', '#9b5de5'),
+      f('shelf', 23, 13, 2, 8, 'solid', '#22c3b8'),
+      f('shelf', 28, 13, 2, 8, 'solid', '#f2679f'),
       // Checkouts by the entrance
-      f('checkout', 3, 20, 2, 1, 'solid'),
-      f('checkout', 8, 20, 2, 1, 'solid'),
-      f('checkout', 13, 20, 2, 1, 'solid'),
-      f('cart', 22, 21, 1, 1, 'hide'),
-      f('cart', 23, 21, 1, 1, 'hide'),
-      // Deli, frozen food (the nugget shelf) and bakery
-      f('deli', 34, 11, 1, 6, 'solid'),
-      f('freezer', 25, 14, 6, 1, 'solid', '#5fb7e8'),
-      f('bakery', 28, 18, 2, 2, 'hide'),
-      f('plant', 34, 22, 1, 1, 'solid'),
+      f('checkout', 3, 25, 2, 1, 'solid'),
+      f('checkout', 8, 25, 2, 1, 'solid'),
+      f('checkout', 13, 25, 2, 1, 'solid'),
+      f('checkout', 18, 25, 2, 1, 'solid'),
+      f('cart', 29, 29, 1, 1, 'hide'),
+      f('cart', 30, 29, 1, 1, 'hide'),
+      f('cart', 31, 29, 1, 1, 'hide'),
+      // Deli, frozen food (the nugget shelf), bakery and a fruit stand
+      f('deli', 46, 12, 1, 7, 'solid'),
+      f('freezer', 34, 16, 8, 1, 'solid', '#5fb7e8'),
+      f('bakery', 35, 21, 2, 2, 'hide'),
+      f('produce', 42, 27, 2, 2, 'hide', '#e74c3c'),
+      f('plant', 46, 30, 1, 1, 'solid'),
+      f('plant', 32, 11, 1, 1, 'solid'),
     ],
     keys: [
-      { color: 'green', x: 33, y: 20 },
-      { color: 'orange', x: 10, y: 3 },
-      { color: 'gold', x: 22, y: 3 },
+      { color: 'green', x: 44, y: 23 },
+      { color: 'orange', x: 14, y: 3 },
+      { color: 'gold', x: 30, y: 3 },
+    ],
+    spills: [
+      // around the green key: a puddle wall on its top and left, get in from below
+      [41, 21, 6, 1],
+      [41, 22, 1, 4],
+      // Cold Room: a stripe in front of the orange key, with a gap by the freezers
+      [11, 3, 1, 3],
+      [12, 5, 3, 1],
+      // Stockroom: a zig-zag in front of the gold key
+      [27, 3, 1, 3],
+      [29, 2, 2, 1],
+      [28, 5, 3, 1],
+      // a leaky bottle in one aisle and by the checkouts
+      [6, 16, 1, 2],
+      [21, 27, 2, 1],
     ],
     family: [
       {
-        id: 'kevin', name: 'Kevin the cashier', kind: 'cashier', start: [6, 21],
-        waypoints: [[2, 22], [6, 21], [11, 22], [11, 19], [2, 19]],
-        patrolSpeed: 1.7, chaseSpeed: 3.6, visionRange: 5.5, fovDeg: 85, giveUp: 3,
+        id: 'kevin', name: 'Kevin the cashier', kind: 'cashier', start: [6, 27],
+        waypoints: [[2, 27], [7, 26], [12, 27], [17, 26], [12, 23], [2, 23]],
+        patrolSpeed: 1.7, chaseSpeed: 3.5, visionRange: 5, fovDeg: 85, giveUp: 3,
       },
       {
-        id: 'brenda', name: 'Brenda the stocker', kind: 'stocker', start: [6, 14],
-        waypoints: [[6, 10], [6, 18], [11, 18], [11, 10], [16, 10], [16, 18], [21, 10]],
-        patrolSpeed: 1.9, chaseSpeed: 3.7, visionRange: 6, fovDeg: 80, giveUp: 3,
+        id: 'brenda', name: 'Brenda the stocker', kind: 'stocker', start: [11, 17],
+        waypoints: [[11, 12], [11, 21], [16, 21], [16, 12], [21, 12], [21, 21], [26, 21], [26, 12]],
+        patrolSpeed: 1.9, chaseSpeed: 3.5, visionRange: 5, fovDeg: 80, giveUp: 3,
       },
       {
-        id: 'dan', name: 'Deli Dan', kind: 'butcher', start: [30, 12],
-        waypoints: [[26, 12], [32, 12], [33, 18], [26, 20], [24, 16], [24, 11]],
-        patrolSpeed: 1.8, chaseSpeed: 3.6, visionRange: 6, fovDeg: 85, giveUp: 3,
+        id: 'dan', name: 'Deli Dan', kind: 'butcher', start: [40, 13],
+        waypoints: [[36, 13], [44, 13], [44, 19], [33, 19], [32, 14]],
+        patrolSpeed: 1.8, chaseSpeed: 3.5, visionRange: 5, fovDeg: 85, giveUp: 3,
       },
       {
-        id: 'priya', name: 'Priya the clerk', kind: 'clerk', start: [12, 9],
-        waypoints: [[3, 6], [12, 9], [22, 6], [17, 6], [6, 9]],
-        patrolSpeed: 1.8, chaseSpeed: 3.7, visionRange: 5.5, fovDeg: 90, giveUp: 3,
+        id: 'priya', name: 'Priya the clerk', kind: 'clerk', start: [15, 10],
+        waypoints: [[3, 7], [15, 10], [22, 7], [29, 10], [8, 11]],
+        patrolSpeed: 1.6, chaseSpeed: 3.4, visionRange: 4.5, fovDeg: 80, giveUp: 2.5,
       },
       {
-        id: 'stan', name: 'Stan the stockroom boss', kind: 'stocker', start: [17, 3],
-        waypoints: [[16, 2], [22, 2], [22, 4], [16, 4]],
+        id: 'rosa', name: 'Rosa from the bakery', kind: 'clerk', start: [38, 25],
+        waypoints: [[33, 24], [38, 28], [33, 28], [38, 24]],
+        patrolSpeed: 1.5, chaseSpeed: 3.3, visionRange: 4.5, fovDeg: 75, giveUp: 2.5,
+      },
+      {
+        id: 'fred', name: 'Frosty Fred', kind: 'stocker', start: [8, 4],
+        waypoints: [[3, 2], [9, 4], [6, 5], [10, 2]],
+        patrolSpeed: 1.6, chaseSpeed: 3.5, visionRange: 5, fovDeg: 90, giveUp: 2.5,
+      },
+      {
+        id: 'stan', name: 'Stan the stockroom boss', kind: 'stocker', start: [20, 2],
+        waypoints: [[19, 3], [24, 2], [26, 2], [24, 4]],
         patrolSpeed: 1.6, chaseSpeed: 3.5, visionRange: 5, fovDeg: 90, giveUp: 2.5,
       },
     ],
-    lights: [[6, 3], [18, 3], [30, 4], [6, 8], [17, 8], [6, 14], [16, 14], [29, 12], [29, 19], [10, 20]],
+    lights: [[7, 3], [24, 3], [39, 5], [7, 9], [22, 9], [6, 16], [16, 16], [26, 16], [38, 13], [40, 22], [12, 27], [43, 27]],
   },
 ];
 
@@ -377,6 +420,8 @@ export interface LevelDef {
   outside: 'garden' | 'parking';
   /** Easter eggs and the nugget rain only live in the house. */
   secrets: boolean;
+  /** Shoppers charge with their carts when the nugget gets near a key. */
+  carts?: boolean;
 }
 
 export const LEVEL1: LevelDef = {
@@ -387,11 +432,11 @@ export const LEVEL1: LevelDef = {
 
 export const LEVEL2: LevelDef = {
   id: 2, name: 'The Grocery Store', floors: STORE,
-  start: { floor: 0, x: 17.5, y: 20.6 },
+  start: { floor: 0, x: 24.5, y: 29.4 },
   keyOrder: ['green', 'orange', 'gold'],
   goal: 'office',
-  shelf: { floor: 0, x: 27.5, y: 15.6 },
-  outside: 'parking', secrets: false,
+  shelf: { floor: 0, x: 37.5, y: 17.6 },
+  outside: 'parking', secrets: false, carts: true,
 };
 
 export const LEVELS: Record<LevelId, LevelDef> = { 1: LEVEL1, 2: LEVEL2 };
