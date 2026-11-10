@@ -14,12 +14,12 @@ Beat Level 1 and **Level 2** unlocks (for testing, type the secret code `shalevi
 
 It opens with a street cutscene: the free nugget wanders down the street wondering *why am I alive?*, spots the **FreshMart** grocery store and decides the answer must be inside. In the store:
 
-- The store is big: six aisles, a fruit and veg corner, a deli, a bakery, checkouts, a Cold Room and a Stockroom.
-- The staff (Kevin the cashier, Brenda the stocker, Deli Dan, Priya the clerk, Rosa from the bakery, Frosty Fred in the Cold Room and Stan in the Stockroom) want to put the nugget back on the shelf so they can win Employee of the Month. If one catches you, you lose a life and end up back on the frozen food shelf.
+- The store is huge (80 × 52 tiles): eighteen aisle shelves in two blocks, a long fruit and veg row, frozen food, a deli, a bakery corner, seven checkouts, and three back rooms: the Cold Room, the Stockroom and the Bakery Kitchen.
+- Twelve staff (Kevin and Gina at the checkouts, Brenda, Tom and Lucy stocking the aisles, Priya in produce, Olga in frozen food, Deli Dan, Rosa from the bakery, Frosty Fred in the Cold Room, Stan in the Stockroom and Baker Bea in the Bakery Kitchen) want to put the nugget back on the shelf so they can win Employee of the Month. If one catches you, you lose a life and end up back on the frozen food shelf.
 - The tall aisle shelves block their view. Hide under the fruit stands, the bakery table, pallets and shopping carts.
 - **Water spills** (with yellow wet-floor signs) guard every key. Step in one and the nugget slides out of control, and the splash makes nearby staff turn to look. Find the dry way around.
 - **Shopping carts:** when you get close to a key, a shopper with a cart shouts "!" and charges straight at you. Step out of the way: getting run over costs a life.
-- Key chain: Green (by the bakery) → Cold Room → Orange → Stockroom → Gold → **Manager's Office**. Walk into the office to win.
+- Key chain: Green (far corner of the sales floor) → Cold Room → Orange → Stockroom → Purple → Bakery Kitchen → Gold → **Manager's Office**. Walk into the office to win.
 
 ## Play on a phone
 
