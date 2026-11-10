@@ -2,7 +2,7 @@
  * Low-poly 3D characters built from primitives: the nugget, the family and Biscuit the dog.
  * Every model faces +z by default; `faceAngle` converts a map facing angle to rotation.y.
  */
-import { THREE, GEO, mat, builder, ball, cyl, cbox, type Builder } from './kit';
+import { THREE, GEO, mat, builder, ball, cyl, cbox, labelTexture, type Builder } from './kit';
 import { rng, shade } from './paint';
 import type { FamilyKind } from '../game/types';
 
@@ -208,6 +208,21 @@ export function drumstick(scale = 1) {
   return g;
 }
 
+/** The Manager's pink slip: "YOU'RE FIRED!" (thrown in the Level 2 boss fight). */
+let slipTex: THREE.Texture | null = null;
+export function pinkSlip(scale = 1) {
+  slipTex ??= labelTexture('FIRED!', '#b0103a');
+  const g = new THREE.Group();
+  const paper = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.015, 0.3), mat('#ff8fb8', { rough: 0.9 }));
+  const words = new THREE.Mesh(new THREE.PlaneGeometry(0.38, 0.1), new THREE.MeshBasicMaterial({ map: slipTex, transparent: true }));
+  words.rotation.x = -Math.PI / 2;
+  words.position.y = 0.009;
+  paper.castShadow = true;
+  g.add(paper, words);
+  g.scale.setScalar(scale);
+  return g;
+}
+
 function bucketTexture() {
   const c = document.createElement('canvas');
   c.width = 256;
@@ -231,6 +246,8 @@ function bucketTexture() {
   return t;
 }
 
+export type BossLook = 'gus' | 'manager';
+
 export class BossModel {
   readonly root = new THREE.Group();
   readonly body = new THREE.Group();
@@ -252,10 +269,20 @@ export class BossModel {
   flash = 0;
   chew = 0;
 
-  constructor() {
+  constructor(readonly look: BossLook = 'gus') {
     const b = builder(true, false);
-    const skin = '#f0b98a', shirt = '#3fa7d6', shorts = '#e07a2e';
     this.root.add(this.body);
+    if (look === 'manager') {
+      ({ hand: this.hand, mouth: this.mouth } = this.buildManager(b));
+      this.hipL = this.body.children[0] as THREE.Group;
+      this.hipR = this.body.children[1] as THREE.Group;
+      this.armL = this.body.getObjectByName('armL') as THREE.Group;
+      this.armR = this.body.getObjectByName('armR') as THREE.Group;
+      this.head = this.body.getObjectByName('head') as THREE.Group;
+      this.finish(b);
+      return;
+    }
+    const skin = '#f0b98a', shirt = '#3fa7d6', shorts = '#e07a2e';
     this.hipL = pivot(this.body, -0.28, 0.75, 0);
     this.hipR = pivot(this.body, 0.28, 0.75, 0);
     for (const hip of [this.hipL, this.hipR]) {
@@ -321,7 +348,12 @@ export class BossModel {
     this.head.add(this.mouth);
     this.head.add(ball(b, 0, 0.17, -0.02, 0.63, 0.36, 0.62, '#2e4fa3'));
     this.head.add(cbox(b, 0, 0.2, -0.32, 0.3, 0.04, 0.24, '#2e4fa3'));
-    // dizzy stars when beaten
+    // dizzy stars when beaten (added in finish)
+    this.finish(b);
+  }
+
+  /** Dizzy stars, shadows and the red hit flash: shared by both bosses. */
+  private finish(b: Builder) {
     for (let i = 0; i < 4; i++) {
       const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.09), new THREE.MeshBasicMaterial({ color: '#ffd84a', toneMapped: false }));
       st.position.set(Math.cos(i * 1.57) * 0.45, 0, Math.sin(i * 1.57) * 0.45);
@@ -330,11 +362,73 @@ export class BossModel {
     this.stars.position.y = 0.55;
     this.head.add(this.stars);
     this.root.traverse((o) => {
-      if (o instanceof THREE.Mesh) {
-        o.castShadow = true;
-      }
+      if (o instanceof THREE.Mesh) o.castShadow = true;
     });
     this.flashMats = b.mats.filter((m): m is THREE.MeshStandardMaterial => m instanceof THREE.MeshStandardMaterial);
+  }
+
+  /** The store Manager: grey suit, red tie, glasses, a clipboard and a fistful of pink slips. */
+  private buildManager(b: Builder) {
+    const skin = '#e8b48c', suit = '#3b4252', trousers = '#2e3440', hair = '#4a4038';
+    const hipL = pivot(this.body, -0.2, 0.85, 0);
+    const hipR = pivot(this.body, 0.2, 0.85, 0);
+    for (const hip of [hipL, hipR]) {
+      limb(b, hip, 0.13, 0.8, trousers);
+      hip.add(cbox(b, 0, -0.82, 0.08, 0.24, 0.12, 0.4, '#111111'));
+    }
+    // suit jacket over a white shirt, with a red tie and a gold name badge
+    this.body.add(ball(b, 0, 1.4, 0, 0.95, 1.1, 0.72, suit, { rough: 0.7 }));
+    this.body.add(ball(b, 0, 0.98, 0, 0.82, 0.45, 0.62, trousers));
+    this.body.add(cbox(b, 0, 1.62, 0.33, 0.28, 0.5, 0.06, '#ffffff'));
+    this.body.add(cbox(b, 0, 1.52, 0.37, 0.09, 0.42, 0.03, '#d62828'));
+    this.body.add(cbox(b, 0, 1.8, 0.37, 0.12, 0.07, 0.03, '#d62828'));
+    this.body.add(cbox(b, 0.26, 1.68, 0.34, 0.16, 0.07, 0.03, '#f5c518', { metal: 0.6 }));
+    const armL = pivot(this.body, -0.56, 1.85, 0);
+    const armR = pivot(this.body, 0.56, 1.85, 0);
+    armL.name = 'armL';
+    armR.name = 'armR';
+    for (const arm of [armL, armR]) {
+      limb(b, arm, 0.12, 0.78, suit);
+      arm.add(ball(b, 0, -0.06, 0, 0.3, 0.26, 0.3, suit));
+      arm.add(ball(b, 0, -0.84, 0, 0.13, 0.13, 0.13, skin));
+    }
+    // clipboard in the left hand
+    const board = new THREE.Group();
+    board.add(cbox(b, 0, 0, 0, 0.42, 0.56, 0.03, '#a0703c'));
+    board.add(cbox(b, 0, -0.02, 0.02, 0.36, 0.46, 0.01, '#ffffff'));
+    board.add(cbox(b, 0, 0.26, 0.03, 0.14, 0.05, 0.03, '#c0c0c0', { metal: 0.7 }));
+    board.position.set(0.1, -0.8, 0.22);
+    board.rotation.set(-0.5, 0, 0);
+    armL.add(board);
+    // pink slips in the right hand
+    const hand = new THREE.Group();
+    hand.position.set(0, -0.9, 0.08);
+    const slips = pinkSlip(1.1);
+    slips.rotation.x = -Math.PI / 2;
+    hand.add(slips);
+    armR.add(hand);
+    // head: neat side-parted hair, glasses and a stern mustache
+    const head = pivot(this.body, 0, 2.3, 0.02);
+    head.name = 'head';
+    head.add(ball(b, 0, 0, 0, 0.5, 0.56, 0.5, skin, { rough: 0.7 }));
+    head.add(ball(b, 0, 0.16, -0.04, 0.52, 0.36, 0.52, hair));
+    head.add(ball(b, 0.12, 0.27, 0.12, 0.3, 0.12, 0.3, hair));
+    for (const sx of [-1, 1]) {
+      head.add(ball(b, sx * 0.1, 0.03, 0.24, 0.06, 0.07, 0.03, '#1d1410', { rough: 0.2 }));
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.014, 6, 16), mat('#222222', { metal: 0.5 }));
+      rim.position.set(sx * 0.1, 0.03, 0.26);
+      head.add(rim);
+      head.add(cbox(b, sx * 0.1, 0.13, 0.25, 0.14, 0.03, 0.03, hair)); // frowning eyebrows
+      head.add(ball(b, sx * 0.26, 0, 0, 0.08, 0.12, 0.08, skin));
+    }
+    head.add(cbox(b, 0, 0.03, 0.27, 0.06, 0.02, 0.02, '#222222'));
+    head.add(ball(b, 0, -0.03, 0.27, 0.08, 0.08, 0.08, '#d9987a'));
+    head.add(ball(b, 0, -0.12, 0.25, 0.17, 0.05, 0.05, hair));
+    const mouth = new THREE.Mesh(GEO.sphere, mat('#7a2a20'));
+    mouth.scale.set(0.12, 0.03, 0.04);
+    mouth.position.set(0, -0.2, 0.23);
+    head.add(mouth);
+    return { hand, mouth };
   }
 
   animate(facing: number | null, moving: boolean, phase: number, dt: number, time: number) {

@@ -4,7 +4,7 @@ import { updateCarts, type Cart } from './carts';
 import { buildMaps, type FloorMap } from './map';
 import { findPath } from './path';
 import { canSee, angleDiff } from './vision';
-import { makeBoss, updateBossFight, ENTRY, BOSS_NAME, type Boss, type Shot, type Bottle } from './boss';
+import { makeBoss, updateBossFight, bossDef, type Boss, type Shot, type Bottle } from './boss';
 import {
   DIFFICULTY, KEY_INFO,
   type Difficulty, type DifficultySettings, type FamilyDef, type FloorDef, type KeyColor, type Vec,
@@ -377,11 +377,14 @@ export function currentObjective(state: GameState): Objective | null {
   const goal = goalRoom(state);
   for (const color of state.level.keyOrder) {
     if (state.unlocked.has(color)) {
+      if (color === 'gold' && state.boss) {
+        const b = bossDef(state);
+        return { color, action: 'boss', text: `Squirt ketchup at ${b.the}!`, hint: `${state.difficulty === 'easy' ? `Squirt away: on Easy the ketchup flies at ${b.the} by itself.` : `Face ${b.the} and squirt: the ketchup goes the way you are facing.`} Dodge the ${b.throws}, stay out of the red ring, and when the bottle is empty grab the new one that appears.` };
+      }
       if (color === 'gold' && goal) {
         return { color, action: 'escape', text: `Get into the ${goal.room.name}!`, hint: `The door is open. Run into the ${goal.room.name}!` };
       }
       if (color === 'gold') {
-        if (state.boss) return { color, action: 'boss', text: `Squirt ketchup at ${BOSS_NAME}!`, hint: `${state.difficulty === 'easy' ? 'Squirt away: on Easy the ketchup flies at ' + BOSS_NAME + ' by itself.' : `Face ${BOSS_NAME} and squirt: the ketchup goes the way you are facing.`} Dodge the drumsticks, stay out of the red ring, and when the bottle is empty grab the new one that appears.` };
         return { color, action: 'escape', text: 'Run out the front door!', hint: 'The front door is open. Run outside to freedom!' };
       }
       continue;
@@ -654,29 +657,24 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
     }
   }
 
-  // Level 2: made it into the Manager's Office
+  // Level 2: made it into the Manager's Office (where the Manager catches the nugget snooping);
+  // Level 1: out through the front door (where Uncle Gus is waiting)
   const goal = goalRoom(state);
-  if (goal && p.floor === goal.floor && map.roomAt(p.pos.x, p.pos.y)?.id === goal.room.id) {
-    state.status = 'won';
-    p.moving = false;
-    state.events.push({ type: 'win' });
-    return;
-  }
-
-  // Escape through the front door
   const door = map.door(tx, ty);
-  if (!goal && door && door.color === 'gold' && state.unlocked.has('gold') && p.pos.y > ty + 0.45) {
+  const inGoal = !!goal && p.floor === goal.floor && map.roomAt(p.pos.x, p.pos.y)?.id === goal.room.id;
+  const outFront = !goal && !!door && door.color === 'gold' && state.unlocked.has('gold') && p.pos.y > ty + 0.45;
+  if (inGoal || outFront) {
+    p.moving = false;
     if (state.noBoss) {
       state.status = 'won';
       state.events.push({ type: 'win' });
     } else {
-      // Out in the front garden... but someone is waiting there.
       state.status = 'bossIntro';
       state.boss = makeBoss(state);
       state.shots = [];
-      p.pos = { x: ENTRY.x, y: ENTRY.y };
+      state.carts = [];
+      p.pos = { ...bossDef(state).entry };
       p.facing = Math.PI / 2;
-      p.moving = false;
       state.events.push({ type: 'bossIntro' });
     }
     return;
