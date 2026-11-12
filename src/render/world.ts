@@ -8,9 +8,13 @@ import { drawSymbol, makeCanvas, rng, shade } from './paint';
 import type { FloorMap } from '../game/map';
 import { KEY_INFO, type FloorStyle, type KeyColor } from '../game/types';
 import { ARENA } from '../game/boss';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export const WALL_H = 2.3;
 const DOOR_H = 1.9;
+/** Farm fences and their gates. */
+const FENCE_H = 1.15;
+const GATE_H = 1.1;
 
 export interface DoorView {
   color: KeyColor;
@@ -112,8 +116,39 @@ function stairBlocks(map: FloorMap) {
   return blocks;
 }
 
-export function buildFloor(map: FloorMap, outsideKind: 'garden' | 'parking' = 'garden'): FloorView {
+export type OutsideKind = 'garden' | 'parking' | 'farm';
+
+/**
+ * Bakes every mesh under `root` into one mesh per material, so scenery made of hundreds of
+ * little boxes (corn rows, fences) costs a handful of draw calls.
+ */
+export function mergeByMaterial(root: THREE.Object3D): THREE.Group {
+  root.updateMatrixWorld(true);
+  const buckets = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh) || Array.isArray(o.material)) return;
+    const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
+    for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+    let list = buckets.get(o.material);
+    if (!list) buckets.set(o.material, (list = []));
+    list.push(g);
+  });
+  const out = new THREE.Group();
+  for (const [m, geos] of buckets) {
+    const merged = mergeGeometries(geos);
+    for (const g of geos) g.dispose();
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, m);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    out.add(mesh);
+  }
+  return out;
+}
+
+export function buildFloor(map: FloorMap, outsideKind: OutsideKind = 'garden'): FloorView {
   const house = outsideKind === 'garden';
+  const farm = outsideKind === 'farm';
   const group = new THREE.Group();
   const id = map.def.id;
   const roomOf = (x: number, y: number) => {
@@ -123,12 +158,24 @@ export function buildFloor(map: FloorMap, outsideKind: 'garden' | 'parking' = 'g
   };
   const hallStyle: FloorStyle = map.def.rooms.find((r) => !r.door)?.style ?? 'wood';
   const hallWall = map.def.rooms.find((r) => !r.door)?.wall ?? '#d9cbb0';
+  // On the farm, walls out in the open are wooden fences (and their doors are gates):
+  // only the barn and the shed get real walls.
+  const indoorNear = (x: number, y: number) => {
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const r = roomOf(x + dx, y + dy);
+        if (r && !r.outdoor) return true;
+      }
+    return false;
+  };
+  const isFence = (x: number, y: number) => farm && map.inBounds(x, y) && (map.isWall(x, y) || !!map.door(x, y)) && !indoorNear(x, y);
 
   // ---------------------------------------------------------------- floors
   const floors = new Map<FloorStyle, QuadBatch>();
   for (let y = 0; y < map.h; y++)
     for (let x = 0; x < map.w; x++) {
-      if (map.isWall(x, y) || map.isStairs(x, y) === 'down') continue;
+      // (farm fences and gates stand on the grass)
+      if ((map.isWall(x, y) && !isFence(x, y)) || map.isStairs(x, y) === 'down') continue;
       const style = roomOf(x, y)?.style ?? hallStyle;
       let q = floors.get(style);
       if (!q) floors.set(style, (q = new QuadBatch()));
@@ -160,10 +207,11 @@ export function buildFloor(map: FloorMap, outsideKind: 'garden' | 'parking' = 'g
       if (side === 'e') walls.quad([x + 1, a, y + 1], [x + 1, a, y], [x + 1, b2, y], [x + 1, b2, y + 1], [1, 0, 0], col);
     }
   };
-  const solidWall = (x: number, y: number) => map.isWall(x, y) && map.inBounds(x, y);
+  const solidWall = (x: number, y: number) => map.isWall(x, y) && map.inBounds(x, y) && !isFence(x, y);
   for (let y = 0; y < map.h; y++)
     for (let x = 0; x < map.w; x++) {
       const isDoor = !!map.door(x, y);
+      if (isFence(x, y)) continue;
       if (!solidWall(x, y) && !isDoor) continue;
       const y0 = isDoor ? DOOR_H : 0;
       walls.quad([x, H, y], [x, H, y + 1], [x + 1, H, y + 1], [x + 1, H, y], [0, 1, 0], top);
@@ -192,12 +240,14 @@ export function buildFloor(map: FloorMap, outsideKind: 'garden' | 'parking' = 'g
     const info = KEY_INFO[d.color];
     const edge = mat(info.dark, { cut: true });
     const faceMat = cutaway(new THREE.MeshStandardMaterial({ map: texture, roughness: 0.6, emissive: info.hex, emissiveIntensity: 0.12 }));
-    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.96, DOOR_H - 0.04, 0.1), [edge, edge, edge, edge, faceMat, faceMat]);
+    // farm gates in the fences are only waist high
+    const ph = isFence(d.x, d.y) ? GATE_H : DOOR_H;
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.96, ph - 0.04, 0.1), [edge, edge, edge, edge, faceMat, faceMat]);
     panel.castShadow = true;
     panel.receiveShadow = true;
     const hinge = new THREE.Group();
     // Panels are modelled along +x; vertical doors get turned 90 degrees.
-    panel.position.set(0.48, DOOR_H / 2, 0);
+    panel.position.set(0.48, ph / 2, 0);
     hinge.add(panel);
     const holder = new THREE.Group();
     if (d.orient === 'h') holder.position.set(d.x + 0.02, 0, d.y + 0.5);
@@ -260,18 +310,26 @@ export function buildFloor(map: FloorMap, outsideKind: 'garden' | 'parking' = 'g
 
   // ---------------------------------------------------------------- furniture
   const hides: HideView[] = [];
+  const staticFurniture = new THREE.Group();
   for (const it of map.def.furniture) {
     const f = buildFurniture(it);
-    group.add(f.group);
+    // farm scenery is made of lots of little pieces: bake the ones that never fade
+    if (farm && it.block !== 'hide') staticFurniture.add(f.group);
+    else group.add(f.group);
     if (it.block === 'hide') {
       for (const m of f.mats) m.transparent = true;
       hides.push({ x: it.x, y: it.y, w: it.w, h: it.h, mats: f.mats, fade: 1 });
     }
   }
 
+  if (staticFurniture.children.length) group.add(mergeByMaterial(staticFurniture));
+
+  // ---------------------------------------------------------------- fences (farm)
+  if (farm) group.add(buildFences(map, isFence));
+
   // ---------------------------------------------------------------- outside
   const M = 14;
-  const grass = house ? mat('#ffffff', { map: grassTexture(), rough: 1 }) : mat('#4a4d52', { rough: 0.95 });
+  const grass = house || farm ? mat('#ffffff', { map: grassTexture(farm), rough: 1 }) : mat('#4a4d52', { rough: 0.95 });
   const strips: [number, number, number, number][] = [
     [-M, -M, map.w + 2 * M, M], [-M, map.h, map.w + 2 * M, M], [-M, 0, M, map.h], [map.w, 0, M, map.h],
   ];
@@ -287,20 +345,23 @@ export function buildFloor(map: FloorMap, outsideKind: 'garden' | 'parking' = 'g
   }
   const R = rng(id * 101 + 5);
   const yard = builder(false, false);
-  for (let i = 0; i < (house ? 26 : 0); i++) {
+  for (let i = 0; i < (house ? 26 : farm ? 40 : 0); i++) {
     const side = i % 4;
     const along = R();
     const out = 1.6 + R() * 6;
     const x = side < 2 ? along * (map.w + 8) - 4 : side === 2 ? -out : map.w + out;
     const z = side >= 2 ? along * (map.h + 8) - 4 : side === 0 ? -out : map.h + out;
     // keep the fenced front garden (the boss arena) clear
-    if (id === 0 && x > ARENA.x0 - 1 && x < ARENA.x1 + 1 && z > map.h - 0.5 && z < ARENA.y1 + 1) continue;
+    if (house && id === 0 && x > ARENA.x0 - 1 && x < ARENA.x1 + 1 && z > map.h - 0.5 && z < ARENA.y1 + 1) continue;
+    // the farm: keep the road in front and the farmhouse behind clear
+    if (farm && (z > map.h - 1 && z < map.h + 4 || (z < 0 && x > map.w - 18 && x < map.w + 2))) continue;
     const s = 0.8 + R() * 0.8;
     cyl(yard, x, 0, z, 0.12 * s, 1.0 * s, '#6b4a2a');
     cone(yard, x, 0.8 * s, z, 0.9 * s, 1.6 * s, shade('#2f6b3a', (R() - 0.5) * 0.3));
     cone(yard, x, 1.6 * s, z, 0.65 * s, 1.2 * s, shade('#3a7d45', (R() - 0.5) * 0.3));
   }
-  if (!house) storefront(yard, map, R);
+  if (outsideKind === 'parking') storefront(yard, map, R);
+  if (farm) farmland(yard, map, R);
   if (house && id === 0) {
     const gold = map.doors.find((d) => d.color === 'gold');
     if (gold) {
@@ -339,6 +400,7 @@ export function buildFloor(map: FloorMap, outsideKind: 'garden' | 'parking' = 'g
   group.add(yard.group);
 
   if (map.def.spills?.length) group.add(buildSpills(map));
+  if (map.def.mud?.length) group.add(buildMud(map));
 
   const lights: [number, number][] = [...map.def.lights];
   return { id, group, doors, hides, lights };
@@ -430,5 +492,84 @@ function buildSpills(map: FloorMap) {
     sign.group.rotation.y = R() * Math.PI;
     g.add(b.group, sign.group);
   }
+  return g;
+}
+
+/** Wooden board fences along every fence tile, joined to their neighbours. */
+function buildFences(map: FloorMap, isFence: (x: number, y: number) => boolean) {
+  const b = builder(false, true);
+  const wood = '#f1e6cf', post = '#d8c7a6';
+  for (let y = 0; y < map.h; y++)
+    for (let x = 0; x < map.w; x++) {
+      if (!isFence(x, y) || map.door(x, y)) continue;
+      box(b, x + 0.4, 0, y + 0.4, 0.2, FENCE_H, 0.2, post);
+      box(b, x + 0.37, FENCE_H, y + 0.37, 0.26, 0.05, 0.26, shade(post, -0.15));
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (!map.inBounds(nx, ny) || !(map.isWall(nx, ny) || map.door(nx, ny))) continue;
+        const post2 = isFence(nx, ny) && !map.door(nx, ny);
+        // boards run to the next post (drawn once, from the west / north one), or up to a gate or wall
+        if (post2 && (dx < 0 || dy < 0)) continue;
+        const len = post2 ? 1 : 0.5;
+        for (const h of [0.3, 0.62, 0.94]) {
+          if (dx) box(b, dx > 0 ? x + 0.5 : x, h, y + 0.45, len, 0.16, 0.1, wood);
+          else box(b, x + 0.45, h, dy > 0 ? y + 0.5 : y, 0.1, 0.16, len, wood);
+        }
+      }
+    }
+  return mergeByMaterial(b.group);
+}
+
+/** Around the farm: the farmhouse behind, fields and a duck pond to the sides, the country road in front. */
+function farmland(yard: ReturnType<typeof builder>, map: FloorMap, R: () => number) {
+  const W = map.w, H = map.h;
+  // the country road along the front, with a bus stop by the gate
+  box(yard, -14, -0.01, H + 0.2, W + 28, 0.02, 2.6, '#7b7166', { rough: 1 });
+  for (let x = -12; x < W + 12; x += 3) box(yard, x, 0.012, H + 1.45, 1.4, 0.005, 0.12, '#f4f1e8');
+  const gate = map.doors.find((d) => d.color === 'gold');
+  const gx = gate ? gate.x : W / 2;
+  cyl(yard, gx + 4, 0, H + 0.6, 0.05, 2.2, '#555');
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.4), new THREE.MeshBasicMaterial({ map: labelTexture('BUS STOP', '#f5c518'), transparent: true }));
+  sign.position.set(gx + 4, 2.2, H + 0.66);
+  yard.group.add(sign);
+  // the farmhouse behind the barn and shed: white walls, red roof, a porch
+  const fx = W - 16, fz = -9;
+  box(yard, fx, 0, fz, 11, 3.2, 6, '#f4efe4');
+  const roof = box(yard, fx - 0.4, 3.2, fz - 0.4, 11.8, 0.25, 6.8, '#a3473a');
+  roof.rotation.x = 0.05;
+  cone(yard, fx + 5.5, 3.4, fz + 3, 6.4, 2, '#a3473a').rotation.y = Math.PI / 4;
+  for (let i = 0; i < 4; i++) box(yard, fx + 1 + i * 2.6, 1.2, fz + 6.01, 1, 1.1, 0.04, '#bfe6ff', { rough: 0.1 });
+  box(yard, fx + 4.6, 0, fz + 6.01, 1.4, 2.1, 0.05, '#6b4a3a');
+  box(yard, fx + 8.5, 3.6, fz + 2, 0.7, 1.4, 0.7, '#9e988a'); // chimney
+  // a red silo next to the barn
+  cyl(yard, -3.2, 0, 5, 1.6, 6.5, '#b5402f');
+  ball(yard, -3.2, 6.5, 5, 3.2, 2.0, 3.2, '#c9ced6', { metal: 0.5, rough: 0.4 });
+  // fields: rows of crops to the left and right
+  for (const [x0, z0] of [[-13, 12], [W + 2, 12], [W + 2, 26]] as const)
+    for (let r = 0; r < 6; r++) {
+      box(yard, x0, 0, z0 + r * 1.6, 10, 0.05, 0.9, '#6e4f30', { rough: 1 });
+      for (let i = 0; i < 12; i++) ball(yard, x0 + 0.4 + i * 0.8, 0.22, z0 + r * 1.6 + 0.45, 0.4, 0.35, 0.4, shade('#58a05a', (R() - 0.5) * 0.3));
+    }
+  // a duck pond
+  ball(yard, -7, -0.02, 28, 7, 0.1, 5, '#5fb7e8', { rough: 0.05, metal: 0.2 });
+  for (const [x, z] of [[-8, 27.5], [-6, 29]]) {
+    ball(yard, x, 0.12, z, 0.3, 0.22, 0.4, '#fbfaf4');
+    ball(yard, x, 0.3, z + 0.18, 0.14, 0.14, 0.14, '#3f8f4a');
+  }
+}
+
+/** Squelchy brown mud puddles. */
+function buildMud(map: FloorMap) {
+  const b = builder(false, false);
+  const R = rng(map.def.id * 13 + 9);
+  const mud = mat('#5e4026', { rough: 0.35 });
+  for (const [sx, sy, sw, sh] of map.def.mud ?? [])
+    for (let y = sy; y < sy + sh; y++)
+      for (let x = sx; x < sx + sw; x++) {
+        ball(b, x + 0.5 + (R() - 0.5) * 0.2, 0.0, y + 0.5 + (R() - 0.5) * 0.2, 1.25 + R() * 0.3, 0.05, 1.1 + R() * 0.3, mud);
+        if (R() < 0.6) ball(b, x + R(), 0.02, y + R(), 0.18, 0.04, 0.14, '#7a5636', { rough: 0.3 });
+      }
+  const g = mergeByMaterial(b.group);
+  g.traverse((o) => { if (o instanceof THREE.Mesh) { o.castShadow = false; o.renderOrder = 1; } });
   return g;
 }

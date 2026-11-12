@@ -22,6 +22,18 @@ It opens with a street cutscene: the free nugget wanders down the street wonderi
 - Key chain: Green (far corner of the sales floor) → Cold Room → Orange → Stockroom → Purple → Bakery Kitchen → Gold → **Manager's Office**.
 - **The Manager:** in the office the nugget hops onto the desk and watches the security cameras: the footage shows it was a plain frozen nugget (no eyes, no smile) when it was bought. Then the Manager walks in ("You are not supposed to be here snooping around my office. I might just have to fire you!" "I'm a chicken nugget! I'm not even working here!" "Whatever.") and the boss fight starts: squirt ketchup at the Manager, dodge the flying pink slips, get out of the red ring before the big stomp, and when the Manager lifts the giant **FIRED** stamp, **dash** (Space, Shift or the DASH button) right through its shock wave.
 
+## Level 3: The Farm
+
+Beat Level 2 and **Level 3** unlocks (the secret code `shalevisbest` unlocks it too). It starts by itself a few seconds after the Level 2 win screen (or press **Play Level 3**).
+
+It opens with a bus ride: the nugget walks out of FreshMart and works it out: nuggets come from chickens, and chickens live on farms, so the answers must be at the farm! It takes the night bus out of the city and gets off at **Clover Hill Farm** in the morning. The farmer takes one look ("Huh, you're a chicken, right? Aren't you supposed to be in your pen?"), chases the nugget, grabs it and drops it in the chicken pen. Then the level starts:
+
+- The farm is out in the morning sun (56 × 40 tiles): the chicken pen, a big farmyard with a pigsty, a tractor, a well and a scarecrow, the Cornfield, the Big Red Barn with its cows, and the Tool Shed. Wooden fences go all the way round.
+- **The Farmer** patrols the whole farmyard and chases with his **rake** raised: it reaches further than an arm, so keep your distance. If he catches you, you lose a life and he puts you back in the pen. **Rusty the farm dog** guards the Cornfield (he sees all the way round, but not far) and **Hank the farmhand** looks after the cows in the barn.
+- The tall corn rows and the haystacks block their view. Hide in the hay bales, under the tractor, the coop and the wheelbarrow.
+- **Mud puddles** make the nugget wade at half speed. Go around them when you can.
+- Key chain: Red (inside the pen) → pen gate → Orange (far corner of the farmyard) → Cornfield → Teal → Big Red Barn → Green → Tool Shed → Gold → the **farm gate**. Run through it onto the country road to escape the farm and win.
+
 ## Play on a phone
 
 The game works on iPhone and Android in portrait or landscape, with a joystick and big buttons. Open the link in Safari or Chrome. For full screen, tap the full screen button (Android), or use **Share → Add to Home Screen** (iPhone) to get a Nugget Escape icon that opens without the browser bars.
@@ -84,7 +96,7 @@ npm run build        # production build in dist/
 npm run build:single # one self-contained HTML file in dist-single/
 ```
 
-Handy URL options for testing: `?level=2` (pick Level 2 even if it is still locked), `?autostart` (skips the cutscene), `?cutscene` (plays it right away), `?difficulty=easy|normal|hard`, `?nofamily`, `?noboss` (win at the front door), `?bot` (autopilot), `?speed=4`, `?seed=1` (repeatable family wandering and bottle spots), `?lowfx` / `?hifx` (force render quality).
+Handy URL options for testing: `?level=2` / `?level=3` (pick that level even if it is still locked), `?autostart` (skips the cutscene), `?cutscene` (plays it right away), `?difficulty=easy|normal|hard`, `?nofamily`, `?noboss` (win at the front door), `?bot` (autopilot), `?speed=4`, `?seed=1` (repeatable family wandering and bottle spots), `?lowfx` / `?hifx` (force render quality).
 
 ## Deploying
 

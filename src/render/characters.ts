@@ -498,7 +498,24 @@ const LOOKS: Record<Exclude<FamilyKind, 'dog'>, Look> = {
   butcher: { shirt: '#ffffff', pants: '#3b3b4f', skin: '#f1c27d', hair: '#8a5a36', scale: 1.08, extra: '#e8e8e8' },
   clerk: { shirt: '#e86f7a', pants: '#2c3e66', skin: '#8d5524', hair: '#141010', scale: 0.95, extra: '#2e9e5b' },
   shopper: { shirt: '#f5a623', pants: '#4a5a8a', skin: '#f1c27d', hair: '#c0392b', scale: 1.0, extra: '#ffffff' },
+  // the farm: denim overalls (extra) over checked shirts
+  farmer: { shirt: '#c0392b', pants: '#3d5f95', skin: '#e8b48a', hair: '#8a8a8a', scale: 1.1, extra: '#3d5f95' },
+  farmhand: { shirt: '#58a05a', pants: '#6b4f3a', skin: '#c68642', hair: '#2b1d14', scale: 0.98, extra: '#8a6a45' },
 };
+
+const FARM = new Set(['farmer', 'farmhand']);
+
+/** The farmer's rake, modelled hanging from the hand: handle along +y, the toothed head on top. */
+export function rake() {
+  const g = new THREE.Group();
+  const b = builder(false, false);
+  const handle = cyl(b, 0, -0.35, 0, 0.025, 1.75, '#b07a4c');
+  const bar = cbox(b, 0, 1.42, 0, 0.62, 0.06, 0.07, '#7c858f', { metal: 0.6, rough: 0.35 });
+  g.add(handle, bar);
+  for (let i = 0; i < 8; i++) g.add(cbox(b, -0.27 + i * 0.077, 1.42, 0.09, 0.025, 0.025, 0.16, '#7c858f', { metal: 0.6, rough: 0.35 }));
+  g.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+  return g;
+}
 
 const STAFF = new Set(['cashier', 'stocker', 'butcher', 'clerk']);
 
@@ -523,6 +540,10 @@ export class PersonModel {
   armPose: { l: number; r: number } | null = null;
   mouthOpen = 0;
   talk = 0;
+  /** The farmer's rake (null for everyone else). */
+  readonly rake: THREE.Group | null = null;
+  /** 0 rake held down by the side .. 1 raised to swipe (chasing). */
+  rakeUp = 0;
 
   constructor(kind: Exclude<FamilyKind, 'dog'>) {
     this.kind = kind;
@@ -569,6 +590,16 @@ export class PersonModel {
       this.body.add(cbox(b, 0.1, 1.28, 0.195, 0.1, 0.05, 0.01, '#ffffff'));
       this.body.add(cbox(b, 0.1, 1.28, 0.2, 0.08, 0.012, 0.005, '#c0392b'));
     }
+    if (FARM.has(kind)) {
+      // overalls: a bib with two straps and shiny buttons, checks on the shirt
+      this.body.add(cbox(b, 0, 1.05, 0.165, 0.34, 0.36, 0.03, L.extra!));
+      this.body.add(cbox(b, 0, 1.08, 0.183, 0.14, 0.1, 0.01, shade(L.extra!, -0.2)));
+      for (const sx of [-0.12, 0.12]) {
+        this.body.add(cbox(b, sx, 1.33, 0.15, 0.05, 0.2, 0.03, L.extra!));
+        this.body.add(ball(b, sx, 1.22, 0.185, 0.03, 0.03, 0.02, '#f5c518', { metal: 0.7, rough: 0.3 }));
+      }
+      for (let i = 0; i < 4; i++) this.body.add(cbox(b, 0, 0.98 + i * 0.12, -0.165, 0.42, 0.03, 0.02, shade(L.shirt, -0.3)));
+    }
 
     // arms
     this.armL = pivot(this.body, -0.29, 1.4, 0);
@@ -576,6 +607,13 @@ export class PersonModel {
     for (const arm of [this.armL, this.armR]) {
       limb(b, arm, 0.062, 0.56, L.shirt);
       arm.add(ball(b, 0, -0.6, 0, 0.13, 0.13, 0.13, L.skin));
+    }
+    if (kind === 'farmer') {
+      const r = rake();
+      r.position.set(0, -0.6, 0.04);
+      r.rotation.x = 0.15;
+      this.armR.add(r);
+      this.rake = r;
     }
 
     // head
@@ -649,6 +687,25 @@ export class PersonModel {
         this.head.add(ball(b, 0, 0.08, -0.03, 0.4, 0.3, 0.4, hair));
         this.head.add(ball(b, 0, 0.08, -0.2, 0.2, 0.2, 0.2, hair)); // puff
         break;
+      case 'farmer': {
+        // grey hair, bushy beard and a wide straw hat
+        this.head.add(ball(b, 0, 0.05, -0.02, 0.38, 0.26, 0.38, hair));
+        this.head.add(ball(b, 0, -0.12, 0.1, 0.3, 0.2, 0.2, hair));
+        this.head.add(cbox(b, 0, -0.04, 0.185, 0.14, 0.03, 0.02, hair)); // mustache
+        const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.03, 24), mat('#e3c46e', { rough: 0.95 }));
+        brim.position.set(0, 0.15, 0);
+        const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.2, 0.2, 18), mat('#e3c46e', { rough: 0.95 }));
+        crown.position.set(0, 0.26, 0);
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(0.205, 0.205, 0.05, 18), mat('#c0392b'));
+        band.position.set(0, 0.18, 0);
+        this.head.add(brim, crown, band);
+        break;
+      }
+      case 'farmhand':
+        this.head.add(ball(b, 0, 0.06, -0.02, 0.38, 0.27, 0.38, hair));
+        this.head.add(ball(b, 0, 0.1, 0, 0.39, 0.22, 0.39, '#e8e1cf')); // cap
+        this.head.add(cbox(b, 0, 0.1, 0.2, 0.22, 0.03, 0.16, '#e8e1cf')); // cap brim
+        break;
       case 'brother':
         this.head.add(ball(b, 0, 0.06, -0.02, 0.38, 0.28, 0.38, hair));
         this.head.add(ball(b, 0, 0.1, 0, 0.39, 0.22, 0.39, L.extra!)); // cap
@@ -675,6 +732,13 @@ export class PersonModel {
       const reach = this.lunge > 0 ? -1.5 * Math.min(1, this.lunge * 2) : 0;
       this.armL.rotation.x = -swing + reach;
       this.armR.rotation.x = swing + reach;
+    }
+    if (this.rake) {
+      // the rake comes up over the farmer's shoulder and swishes while he chases
+      const up = this.rakeUp;
+      const base = this.armPose ? this.armR.rotation.x : swing * 0.4 - 0.25;
+      this.armR.rotation.x = base * (1 - up) + (-2.5 + Math.sin(phase * 1.4) * 0.35) * up;
+      if (this.lunge > 0) this.armR.rotation.x = -1.4 + 0.6 * Math.min(1, this.lunge * 2);
     }
     this.armL.rotation.z = -0.08;
     this.armR.rotation.z = 0.08;

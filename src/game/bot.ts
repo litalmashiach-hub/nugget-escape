@@ -42,10 +42,11 @@ export function botInput(state: GameState): Input {
     gx = best.x; gy = best.y;
   }
 
-  // stay off the slippery spills
-  const walk = (x: number, y: number) =>
-    (x === gx && y === gy) || (map.walkableForPlayer(x, y, state.unlocked) && !map.isStairs(x, y) && !map.isSpill(x, y));
-  const path = findPath(map.w, map.h, walk, Math.floor(p.pos.x), Math.floor(p.pos.y), gx, gy);
+  // stay off the slippery spills (and out of the mud, when there is a way around)
+  const walk = (avoidMud: boolean) => (x: number, y: number) =>
+    (x === gx && y === gy) || (map.walkableForPlayer(x, y, state.unlocked) && !map.isStairs(x, y) && !map.isSpill(x, y) && !(avoidMud && map.isMud(x, y)));
+  const sx = Math.floor(p.pos.x), sy = Math.floor(p.pos.y);
+  const path = findPath(map.w, map.h, walk(true), sx, sy, gx, gy) ?? findPath(map.w, map.h, walk(false), sx, sy, gx, gy);
   if (!path) return { mx: 0, my: 0, dash: false };
 
   // Aim for the first node that is still meaningfully ahead.

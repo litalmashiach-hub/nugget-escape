@@ -182,6 +182,11 @@ const FLOOR_BASE: Record<FloorStyle, string> = {
   storeTile: '#f4f1ea',
   concrete: '#a9aeb2',
   officeCarpet: '#6f7f9e',
+  grass: '#5d9a45',
+  dirt: '#8a6a45',
+  straw: '#d9b65e',
+  barn: '#9a6a42',
+  road: '#7b7166',
 };
 
 /** Repeating floor texture covering 2x2 tiles. */
@@ -269,6 +274,67 @@ export function floorTexture(style: FloorStyle): THREE.Texture {
     ctx.fillStyle = 'rgba(60,60,60,0.25)';
     ctx.fillRect(0, 0, S, 2);
     ctx.fillRect(0, 0, 2, S);
+  } else if (style === 'grass') {
+    // sunny meadow: blades in a few greens with the odd clover and daisy
+    for (let i = 0; i < 3200; i++) {
+      ctx.fillStyle = shade(base, (R() - 0.5) * 0.35);
+      ctx.fillRect(R() * S, R() * S, 2, 3 + R() * 4);
+    }
+    for (let i = 0; i < 14; i++) {
+      ctx.fillStyle = R() < 0.5 ? '#ffffff' : '#f5d64a';
+      ctx.beginPath();
+      ctx.arc(R() * S, R() * S, 2 + R() * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (style === 'dirt') {
+    // tilled field: furrows running across
+    for (let r = 0; r < 8; r++) {
+      ctx.fillStyle = shade(base, -0.18);
+      ctx.fillRect(0, r * 32 + 22, S, 7);
+      ctx.fillStyle = shade(base, 0.1);
+      ctx.fillRect(0, r * 32 + 4, S, 6);
+    }
+    for (let i = 0; i < 1600; i++) {
+      ctx.fillStyle = shade(base, (R() - 0.5) * 0.3);
+      ctx.fillRect(R() * S, R() * S, 2 + R() * 2, 2);
+    }
+  } else if (style === 'straw') {
+    // straw strewn over packed earth
+    ctx.fillStyle = shade(base, -0.25);
+    ctx.fillRect(0, 0, S, S);
+    for (let i = 0; i < 900; i++) {
+      ctx.strokeStyle = shade(base, (R() - 0.5) * 0.4);
+      ctx.lineWidth = 1.5 + R();
+      const x = R() * S, y = R() * S, a = R() * Math.PI, l = 8 + R() * 14;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+      ctx.stroke();
+    }
+  } else if (style === 'barn') {
+    // wide old floorboards with straw on them
+    const rows = 6;
+    const ph = S / rows;
+    for (let r = 0; r < rows; r++) {
+      ctx.fillStyle = shade(base, (R() - 0.5) * 0.2);
+      ctx.fillRect(0, r * ph, S, ph);
+      ctx.fillStyle = 'rgba(40,20,5,0.45)';
+      ctx.fillRect(0, r * ph, S, 2);
+    }
+    for (let i = 0; i < 260; i++) {
+      ctx.strokeStyle = shade('#e3c46e', (R() - 0.5) * 0.3);
+      ctx.lineWidth = 1.5;
+      const x = R() * S, y = R() * S, a = R() * Math.PI, l = 6 + R() * 10;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+      ctx.stroke();
+    }
+  } else if (style === 'road') {
+    for (let i = 0; i < 2400; i++) {
+      ctx.fillStyle = shade(base, (R() - 0.5) * 0.3);
+      ctx.fillRect(R() * S, R() * S, 2 + R() * 2, 2 + R() * 2);
+    }
   } else {
     // carpets: soft speckle
     for (let i = 0; i < 2600; i++) {
@@ -281,20 +347,22 @@ export function floorTexture(style: FloorStyle): THREE.Texture {
   return t;
 }
 
-export function grassTexture(): THREE.Texture {
-  const hit = texCache.get('grass');
+/** Lawn outside the walls. `sunny` is the bright morning grass around the farm. */
+export function grassTexture(sunny = false): THREE.Texture {
+  const id = sunny ? 'grass-sunny' : 'grass';
+  const hit = texCache.get(id);
   if (hit) return hit;
   const S = 256;
   const { c, ctx } = makeCanvas(S, S, 1);
   const R = rng(42);
-  ctx.fillStyle = '#2f5a35';
+  ctx.fillStyle = sunny ? '#4f8a3c' : '#2f5a35';
   ctx.fillRect(0, 0, S, S);
   for (let i = 0; i < 3000; i++) {
-    ctx.fillStyle = shade('#3d7343', (R() - 0.5) * 0.5);
+    ctx.fillStyle = shade(sunny ? '#64a34a' : '#3d7343', (R() - 0.5) * 0.5);
     ctx.fillRect(R() * S, R() * S, 2, 3 + R() * 3);
   }
   const t = canvasTexture(c, true);
-  texCache.set('grass', t);
+  texCache.set(id, t);
   return t;
 }
 

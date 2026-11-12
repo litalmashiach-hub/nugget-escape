@@ -14,6 +14,7 @@ import { Cutscene, BossCutscene, CAM_OFFSET } from './cutscene';
 import { bakeBubble, drawSymbol, makeCanvas } from './paint';
 import { LEVEL1, type LevelId } from '../game/levels';
 import { StreetCutscene } from './street';
+import { FarmCutscene } from './farm';
 
 const START = LEVEL1.start as Required<typeof LEVEL1.start>;
 import { INTRO_TIME, type Chaser, type GameEvent, type GameState } from '../game/state';
@@ -21,7 +22,7 @@ import { castRay } from '../game/vision';
 import { SLAM_RADIUS, WAVE_BAND, WAVE_MAX, autoAim, bossDef } from '../game/boss';
 import { KEY_INFO, type KeyColor } from '../game/types';
 
-export type View = 'game' | 'menu' | 'cutscene' | 'bossIntro' | 'street';
+export type View = 'game' | 'menu' | 'cutscene' | 'bossIntro' | 'street' | 'farm';
 
 export interface SceneOptions {
   /** Cheaper rendering for slow or software GPUs: no shadows, no lamp lights. */
@@ -154,6 +155,7 @@ export class Scene {
   readonly bossCut = new BossCutscene();
   readonly officeCut = new OfficeCutscene();
   readonly street = new StreetCutscene();
+  readonly farm = new FarmCutscene();
   private secretFx = new SecretFx();
   private foodFx = new FoodFx();
   private gus = new BossModel();
@@ -194,6 +196,7 @@ export class Scene {
   private dangerLevel = 0;
   private dangerEl = document.getElementById('danger');
   private glow = glowTexture();
+  private nightHemi = 1.1;
 
   constructor(host: HTMLElement, opts: SceneOptions) {
     this.host = host;
@@ -210,6 +213,7 @@ export class Scene {
     this.scene.background = new THREE.Color('#0e1324');
     this.scene.fog = new THREE.Fog('#0e1324', 26, 60);
     this.hemi.intensity = opts.lowFx ? 1.7 : opts.phone ? 1.35 : 1.1;
+    this.nightHemi = this.hemi.intensity;
     this.scene.add(this.hemi, this.sun, this.sun.target);
     this.sun.castShadow = !opts.lowFx;
     this.sun.shadow.mapSize.setScalar(opts.phone ? 1024 : 2048);
@@ -229,7 +233,7 @@ export class Scene {
     }
 
     for (const k of ['!', '?', 'yum'] as const) this.bubbleTex[k] = canvasTexture(bakeBubble(k));
-    this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.street.group, this.gus.root, this.manager.root, this.officeCut.group, this.secretFx.group, this.foodFx.group);
+    this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.street.group, this.farm.group, this.gus.root, this.manager.root, this.officeCut.group, this.secretFx.group, this.foodFx.group);
     this.gus.root.visible = false;
     this.manager.root.visible = false;
     for (let i = 0; i < 16; i++) {
@@ -479,6 +483,12 @@ export class Scene {
           this.particles.emit(e.x, 0.1, e.y, { vx: Math.cos(a) * sp, vy: 1.2 + Math.random() * 2, vz: Math.sin(a) * sp, grav: 8, life: 0.7, size: 0.06, color: '#9fdcff' });
         }
         break;
+      case 'mud':
+        for (let i = 0; i < 16; i++) {
+          const a = Math.random() * Math.PI * 2, sp = 0.6 + Math.random() * 1.4;
+          this.particles.emit(e.x, 0.1, e.y, { vx: Math.cos(a) * sp, vy: 1 + Math.random() * 1.6, vz: Math.sin(a) * sp, grav: 8, life: 0.6, size: 0.07, color: '#5e4026' });
+        }
+        break;
       case 'cartCrash':
         this.shake = Math.max(this.shake, 0.1);
         for (let i = 0; i < 14; i++) this.particles.emit(e.x, 0.4, e.y, { vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 2, vz: (Math.random() - 0.5) * 3, grav: 8, life: 0.7, size: 0.07, color: ['#e8424a', '#f5c518', '#58c13f', '#3d7df0'][i % 4] });
@@ -558,15 +568,18 @@ export class Scene {
     this.ensureEntities(state);
     const p = state.player;
     const bossIntro = view === 'bossIntro';
-    const street = view === 'street';
+    const street = view === 'street' || view === 'farm';
     const story = view === 'cutscene' || view === 'menu' || street;
+    // the farm is out in the morning sun; everywhere else it's evening or night
+    this.atmosphere(view === 'farm' ? this.farm.sky : view === 'game' || view === 'bossIntro' ? (state.level.id === 3 ? 1 : 0) : 0);
     if (street) this.showFloor(0, 0);
     else if (story) this.showFloor(1, START.floor);
     else this.showFloor(state.level.id, p.floor);
     const fv = this.floorView(story ? 1 : state.level.id, story ? START.floor : p.floor)!;
 
     this.cutscene.group.visible = story && !street;
-    this.street.group.visible = street;
+    this.street.group.visible = view === 'street';
+    this.farm.group.visible = view === 'farm';
     this.nugget.root.visible = !story;
     this.gus.root.visible = !story && !!state.boss && p.floor === 0 && state.level.id === 1;
     this.manager.root.visible = !story && !!state.boss && state.level.id === 2;
@@ -600,7 +613,8 @@ export class Scene {
       if (Math.random() < dt * 4) this.particles.emit(k.x + (Math.random() - 0.5) * 0.5, 0.4 + Math.random() * 0.4, k.y + (Math.random() - 0.5) * 0.5, { vy: 0.5, life: 0.8, size: 0.04, color: KEY_INFO[k.color].hex });
     }
 
-    if (street) this.renderStreet(dt);
+    if (view === 'farm') this.renderFarm(dt);
+    else if (street) this.renderStreet(dt);
     else if (story) this.renderStory(dt, view);
     else if (bossIntro) this.renderBossIntro(state, dt);
     else this.renderGame(state, dt, fv);
@@ -616,7 +630,7 @@ export class Scene {
     this.particles.update(dt);
 
     // Shadow-casting moonlight follows the camera focus
-    const focus = street ? this.street.focus : story ? new THREE.Vector3(17, 0, 4.5) : bossIntro ? (state.level.id === 2 ? this.officeCut.focus : new THREE.Vector3(15, 0, 24.5)) : this.camTarget;
+    const focus = view === 'farm' ? this.farm.focus : street ? this.street.focus : story ? new THREE.Vector3(17, 0, 4.5) : bossIntro ? (state.level.id === 2 ? this.officeCut.focus : new THREE.Vector3(15, 0, 24.5)) : this.camTarget;
     this.sun.position.set(focus.x - 7, 16, focus.z + 9);
     this.sun.target.position.copy(focus);
 
@@ -666,6 +680,33 @@ export class Scene {
     this.camReady = false;
     this.setDanger(0, dt);
   }
+
+  private renderFarm(dt: number) {
+    for (const c of this.chasers.values()) { c.model.root.visible = false; c.bubble.visible = false; c.cone.visible = false; }
+    this.farm.update(dt, this.camera, this.time);
+    if (this.camera.aspect < 0.8) {
+      const dir = this.camera.getWorldDirection(new THREE.Vector3());
+      this.camera.position.addScaledVector(dir, -2.5);
+    }
+    this.camReady = false;
+    this.setDanger(0, dt);
+  }
+
+  /** Night (0) to a sunny morning (1): sky, fog and sunlight. */
+  private atmosphere(day: number) {
+    const bg = this.scene.background as THREE.Color;
+    bg.set('#0e1324').lerp(this.dayColor.set('#9fd4f5'), day);
+    const fog = this.scene.fog as THREE.Fog;
+    fog.color.copy(bg);
+    fog.near = 26 + day * 8;
+    fog.far = 60 + day * 25;
+    this.sun.color.set('#c9d4ff').lerp(this.dayColor.set('#fff1d6'), day);
+    this.sun.intensity = 1.25 + day * 1.1;
+    this.hemi.color.set('#c9d3ff').lerp(this.dayColor.set('#e4f3ff'), day);
+    this.hemi.groundColor.set('#5a4632').lerp(this.dayColor.set('#6f8a4a'), day);
+    this.hemi.intensity = this.nightHemi * (1 + day * 0.25);
+  }
+  private dayColor = new THREE.Color();
 
   private renderStory(dt: number, view: View) {
     for (const c of this.chasers.values()) { c.model.root.visible = false; c.bubble.visible = false; c.cone.visible = false; }
@@ -811,7 +852,11 @@ export class Scene {
     const n = this.nugget;
     let nx = p.pos.x, nz = p.pos.y, ny = 0;
     const st = state.level.start;
-    if (state.status === 'intro' && !st.plate) {
+    if (state.status === 'intro' && state.level.intro === 'drop') {
+      // dropped into the pen by the farmer: falls in and bounces
+      const t = 1 - Math.max(0, state.statusTimer) / INTRO_TIME;
+      ny = t < 0.45 ? 2.2 * (1 - (t / 0.45) ** 2) : Math.abs(Math.sin(((t - 0.45) / 0.55) * Math.PI * 2)) * 0.3 * (1 - (t - 0.45) / 0.55);
+    } else if (state.status === 'intro' && !st.plate) {
       // walks in through the sliding doors
       const t = 1 - Math.max(0, state.statusTimer) / INTRO_TIME;
       nz = st.y + 1.6 * (1 - t);
@@ -854,7 +899,7 @@ export class Scene {
       n.inner.position.x = 0;
     }
     if (p.moving && (state.status === 'playing' || fighting) && Math.random() < dt * (p.dashTime > 0 ? 40 : 6)) {
-      this.particles.emit(p.pos.x + (Math.random() - 0.5) * 0.15, 0.03, p.pos.y + (Math.random() - 0.5) * 0.15, { vy: 0.3, life: 0.5, size: 0.05, color: '#d9a54a' });
+      this.particles.emit(p.pos.x + (Math.random() - 0.5) * 0.15, 0.03, p.pos.y + (Math.random() - 0.5) * 0.15, { vy: 0.3, life: 0.5, size: 0.05, color: p.inMud ? '#5e4026' : '#d9a54a' });
     }
 
     // ------------------------------------------------ hiding spots fade when the nugget is underneath
@@ -877,7 +922,11 @@ export class Scene {
       cv.bubble.visible = false;
       if (!here) continue;
       cv.model.root.position.set(c.pos.x, 0, c.pos.y);
-      if (cv.model instanceof PersonModel) cv.model.animate(c.facing, c.moving, c.walkPhase, dt);
+      if (cv.model instanceof PersonModel) {
+        // the farmer lifts his rake while he chases
+        cv.model.rakeUp += ((c.mode === 'chase' || c.mode === 'alert' ? 1 : 0) - cv.model.rakeUp) * Math.min(1, dt * 6);
+        cv.model.animate(c.facing, c.moving, c.walkPhase, dt);
+      }
       else cv.model.animate(c.facing, c.moving, c.walkPhase, dt, this.time);
       const feasting = c.mode === 'feast';
       const chewing = feasting && c.timer > 0 && !c.moving;

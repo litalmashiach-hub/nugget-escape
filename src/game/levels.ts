@@ -489,7 +489,167 @@ export const STORE: FloorDef[] = [
   },
 ];
 
-export type LevelId = 1 | 2;
+// ================================================================ Level 3: the farm
+
+/**
+ * Clover Hill Farm, on a sunny morning. The farmer has locked the nugget in the chicken pen.
+ * Key chain: red (in the pen) -> pen gate -> orange (far corner of the farmyard) -> Cornfield
+ *   -> teal -> Big Red Barn -> green -> Tool Shed -> gold -> the farm gate and the country road (the goal).
+ * Rows of corn and haystacks are tall: nobody can see through them.
+ * Sticky mud puddles slow the nugget right down.
+ */
+export const FARM: FloorDef[] = [
+  {
+    id: 0,
+    name: 'Clover Hill Farm',
+    rows: [
+      '########################################################',
+      '#..................#.......................#...........#',
+      '#..................#.......................#...........#',
+      '#..................#...############........#...........#',
+      '#..................#...#..........#........#...........#',
+      '#..................#...#..........#........#...........#',
+      '#..................#...#..........#........#...........#',
+      '#..................#...#..........#........#...........#',
+      '#..................#...#..........#........#...........#',
+      '#..................#...#..........#........#####g#######',
+      '#..................#...#..........#....................#',
+      '#..................#...#####r######....................#',
+      '#..................#...................................#',
+      '#########tt#########...................................#',
+      '#......................................................#',
+      '#......................................................#',
+      '#......................................................#',
+      '#......................................................#',
+      '#......................................................#',
+      '#......................................................#',
+      '#......................................................#',
+      '#..................................#####################',
+      '#..................................#...................#',
+      '#..................................#...................#',
+      '#..................................#...................#',
+      '#..................................#...................#',
+      '#..................................#...................#',
+      '#..................................#...................#',
+      '#..................................o...................#',
+      '#..................................#...................#',
+      '#..................................#...................#',
+      '#..................................#...................#',
+      '#..................................#...................#',
+      '#..................................#...................#',
+      '#..................................#...................#',
+      '#..................................#...................#',
+      '#..................................#...................#',
+      '###########################ff###########################',
+      '#......................................................#',
+      '########################################################',
+    ],
+    rooms: [
+      { id: 'pen', name: 'Chicken Pen', seed: [28, 7], style: 'straw', wall: '#c8a26b', door: 'red', outdoor: true },
+      { id: 'corn', name: 'Cornfield', seed: [44, 29], style: 'dirt', wall: '#c8a26b', door: 'orange', outdoor: true },
+      { id: 'barn', name: 'Big Red Barn', seed: [9, 6], style: 'barn', wall: '#f1dcc0', door: 'teal' },
+      { id: 'shed', name: 'Tool Shed', seed: [49, 4], style: 'concrete', wall: '#cbd5dc', door: 'green' },
+      { id: 'road', name: 'Country Road', seed: [10, 38], style: 'road', wall: '#c8a26b', door: 'gold', outdoor: true },
+      { id: 'yard', name: 'Farmyard', seed: [12, 25], style: 'grass', wall: '#b5402f', outdoor: true },
+    ],
+    furniture: [
+      // Chicken pen: the coop on stilts (hide underneath), a water trough, hay and the other hens
+      f('coop', 24, 4, 3, 2, 'hide'),
+      f('trough', 30, 9, 3, 1, 'solid'),
+      f('hay', 33, 4, 1, 1, 'hide'),
+      f('hen', 26, 8, 1, 1, 'none'),
+      f('hen', 31, 6, 1, 1, 'none'),
+      f('hen', 24, 9, 1, 1, 'none'),
+      // Big Red Barn: haystacks, hay bales, cows in their stalls
+      f('haystack', 1, 1, 2, 2, 'solid'),
+      f('haystack', 16, 1, 2, 2, 'solid'),
+      f('hay', 5, 1, 2, 1, 'hide'),
+      f('hay', 12, 1, 2, 1, 'hide'),
+      f('hay', 8, 6, 1, 1, 'hide'),
+      f('hay', 11, 6, 1, 1, 'hide'),
+      f('cow', 2, 8, 2, 1, 'solid'),
+      f('cow', 2, 11, 2, 1, 'solid'),
+      f('cow', 15, 8, 2, 1, 'solid'),
+      f('cow', 15, 11, 2, 1, 'solid', '#5a3a22'),
+      f('trough', 6, 11, 3, 1, 'solid'),
+      f('milkCans', 17, 5, 1, 1, 'solid'),
+      // Tool Shed
+      f('workbench', 44, 1, 4, 1, 'solid'),
+      f('barrel', 54, 1, 1, 1, 'solid'),
+      f('barrel', 44, 7, 1, 1, 'solid'),
+      f('barrel', 45, 8, 1, 1, 'solid'),
+      f('wheelbarrow', 50, 6, 1, 1, 'hide'),
+      f('woodpile', 50, 1, 2, 1, 'solid'),
+      // Farmyard
+      f('pigsty', 2, 15, 5, 4, 'solid'),
+      f('tractor', 8, 21, 3, 2, 'hide'),
+      f('haystack', 14, 15, 2, 2, 'solid'),
+      f('haystack', 50, 17, 2, 2, 'solid'),
+      f('hay', 21, 16, 2, 1, 'hide'),
+      f('hay', 30, 14, 1, 1, 'hide'),
+      f('hay', 5, 27, 2, 1, 'hide'),
+      f('hay', 17, 32, 2, 1, 'hide'),
+      f('hay', 39, 13, 2, 1, 'hide'),
+      f('hay', 24, 24, 1, 1, 'hide'),
+      f('well', 20, 27, 2, 2, 'solid'),
+      f('trough', 12, 26, 3, 1, 'solid'),
+      f('scarecrow', 28, 30, 1, 1, 'solid'),
+      f('pumpkins', 11, 34, 3, 2, 'solid'),
+      f('woodpile', 37, 1, 4, 1, 'solid'),
+      f('wheelbarrow', 33, 18, 1, 1, 'hide'),
+      f('cow', 46, 14, 2, 1, 'solid'),
+      f('milkCans', 13, 14, 1, 1, 'solid'),
+      // Cornfield: tall rows with a cross path through the middle
+      f('corn', 37, 22, 2, 6, 'solid'),
+      f('corn', 37, 30, 2, 7, 'solid'),
+      f('corn', 41, 22, 2, 6, 'solid'),
+      f('corn', 41, 30, 2, 7, 'solid'),
+      f('corn', 45, 22, 2, 6, 'solid'),
+      f('corn', 45, 30, 2, 7, 'solid'),
+      f('corn', 49, 22, 2, 6, 'solid'),
+      f('corn', 49, 30, 2, 7, 'solid'),
+      f('scarecrow', 52, 26, 1, 1, 'solid'),
+      f('hay', 53, 29, 1, 1, 'hide'),
+    ],
+    keys: [
+      { color: 'red', x: 32, y: 5 },
+      { color: 'orange', x: 3, y: 35 },
+      { color: 'teal', x: 53, y: 35 },
+      { color: 'green', x: 17, y: 3 },
+      { color: 'gold', x: 53, y: 3 },
+    ],
+    mud: [
+      [2, 33, 4, 1],
+      [6, 34, 1, 3],
+      [17, 23, 3, 2],
+      [26, 18, 2, 1],
+      [40, 18, 3, 1],
+      [23, 35, 2, 1],
+      [43, 32, 2, 1],
+      [51, 33, 2, 1],
+    ],
+    family: [
+      {
+        id: 'farmer', name: 'The Farmer', kind: 'farmer', start: [16, 19],
+        waypoints: [[16, 19], [28, 15], [40, 16], [50, 13], [39, 5], [30, 22], [18, 30], [8, 25], [26, 34], [32, 26]],
+        patrolSpeed: 2.1, chaseSpeed: 3.9, visionRange: 7, fovDeg: 85, giveUp: 3.5, reach: 0.45,
+      },
+      {
+        id: 'rusty', name: 'Rusty the farm dog', kind: 'dog', start: [39, 25],
+        waypoints: [[39, 23], [39, 35], [47, 29], [52, 23], [52, 35], [43, 35], [43, 29]],
+        patrolSpeed: 2.3, chaseSpeed: 4.4, visionRange: 3.4, fovDeg: 360, giveUp: 1.8,
+      },
+      {
+        id: 'hank', name: 'Hank the farmhand', kind: 'farmhand', start: [9, 4],
+        waypoints: [[3, 5], [9, 3], [15, 5], [13, 9], [6, 9], [9, 11]],
+        patrolSpeed: 1.7, chaseSpeed: 3.6, visionRange: 5.5, fovDeg: 85, giveUp: 3,
+      },
+    ],
+    lights: [],
+  },
+];
+
+export type LevelId = 1 | 2 | 3;
 
 export interface LevelDef {
   id: LevelId;
@@ -504,7 +664,13 @@ export interface LevelDef {
   /** Caught by staff: put back on this shelf spot instead of the last checkpoint. */
   shelf?: { floor: number; x: number; y: number };
   /** What surrounds the building. */
-  outside: 'garden' | 'parking';
+  outside: 'garden' | 'parking' | 'farm';
+  /** Where the nugget ends up when caught there (for the toasts), e.g. "back on the shelf". */
+  caughtTo?: string;
+  /** false: reaching the goal wins at once (no boss fight). */
+  boss?: boolean;
+  /** How the nugget arrives: walking in (default) or dropped into the pen by the farmer. */
+  intro?: 'walk' | 'drop';
   /** Easter eggs and the nugget rain only live in the house. */
   secrets: boolean;
   /** Shoppers charge with their carts when the nugget gets near a key. */
@@ -522,8 +688,18 @@ export const LEVEL2: LevelDef = {
   start: { floor: 0, x: 40, y: 49.4 },
   keyOrder: ['green', 'orange', 'purple', 'gold'],
   goal: 'office',
-  shelf: { floor: 0, x: 68.5, y: 21.6 },
+  shelf: { floor: 0, x: 68.5, y: 21.6 }, caughtTo: 'back on the shelf',
   outside: 'parking', secrets: false, carts: true,
 };
 
-export const LEVELS: Record<LevelId, LevelDef> = { 1: LEVEL1, 2: LEVEL2 };
+export const LEVEL3: LevelDef = {
+  id: 3, name: 'The Farm', floors: FARM,
+  start: { floor: 0, x: 27.5, y: 7.5 },
+  keyOrder: ['red', 'orange', 'teal', 'green', 'gold'],
+  goal: 'road',
+  // caught: the farmer puts the nugget back in the chicken pen
+  shelf: { floor: 0, x: 28.5, y: 6.5 }, caughtTo: 'back in the pen',
+  outside: 'farm', secrets: false, boss: false, intro: 'drop',
+};
+
+export const LEVELS: Record<LevelId, LevelDef> = { 1: LEVEL1, 2: LEVEL2, 3: LEVEL3 };

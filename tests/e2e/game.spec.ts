@@ -214,6 +214,8 @@ test('Level 2 is locked on a fresh device, and beating Level 1 unlocks it and st
   test.setTimeout(240_000);
   const errors = await open(page);
   await expect(page.locator('#level-2')).toBeDisabled();
+  await expect(page.locator('#level-3')).toBeDisabled();
+  await expect(page.locator('#level-3')).toContainText('Beat Level 2 to unlock');
   await expect(page.locator('#level-2')).toContainText('Beat Level 1 to unlock');
   // the robot beats Level 1 (quick version: no family, no boss)
   await page.goto('/?autostart&nofamily&noboss&bot&speed=12&seed=1');
@@ -266,12 +268,14 @@ test('Level 2: a store employee puts the nugget back on the shelf', async ({ pag
   expect(errors).toEqual([]);
 });
 
-test('typing the secret code "shalevisbest" unlocks Level 2 without beating Level 1', async ({ page }) => {
+test('typing the secret code "shalevisbest" unlocks Levels 2 and 3 without beating Level 1', async ({ page }) => {
   const errors = await open(page);
   await expect(page.locator('#level-2')).toBeDisabled();
+  await expect(page.locator('#level-3')).toBeDisabled();
   await page.keyboard.type('shalevisbest');
   await expect(page.locator('#level-2')).toBeEnabled();
-  await expect(page.locator('#cheat-note')).toHaveText('Secret code accepted: Level 2 unlocked!');
+  await expect(page.locator('#level-3')).toBeEnabled();
+  await expect(page.locator('#cheat-note')).toHaveText('Secret code accepted: Levels 2 and 3 unlocked!');
   await page.locator('#level-2').click();
   await page.locator('#btn-play').click();
   expect(await page.evaluate(() => (window as any).__nugget.mode)).toBe('street');
@@ -279,6 +283,7 @@ test('typing the secret code "shalevisbest" unlocks Level 2 without beating Leve
   await page.reload();
   await page.waitForFunction(() => (window as any).__nugget?.mode !== undefined);
   await expect(page.locator('#level-2')).toBeEnabled();
+  await expect(page.locator('#level-3')).toBeEnabled();
   expect(errors).toEqual([]);
 });
 
@@ -332,8 +337,82 @@ test('the robot player gets through the grocery store and beats the Manager', as
   await expect(page.locator('#screen-win')).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('#win-title')).toHaveText('You beat the Manager!');
   await expect(page.locator('.key-slot.used')).toHaveCount(4);
-  await expect(page.locator('#btn-next')).toBeHidden();
   await expect(page.locator('#win-secrets-box')).toBeHidden();
+  // beating the store unlocks the farm, which starts on its own with the bus ride
+  await expect(page.locator('#win-sub')).toContainText('Level 3 unlocked: The Farm!');
+  await expect(page.locator('#btn-next')).toHaveText('Play Level 3');
+  await expect(page.locator('#win-next-note')).toContainText('Level 3 starts in');
+  await expect.poll(() => page.evaluate(() => (window as any).__nugget.mode), { timeout: 15_000 }).toBe('farm');
+  expect(await page.evaluate(() => (window as any).__nugget.state.level.id)).toBe(3);
+  await page.evaluate(() => (window as any).__nugget.toMenu());
+  await expect(page.locator('#level-3')).toBeEnabled();
+  expect(errors).toEqual([]);
+});
+
+test('Level 3 opens with the bus ride to the farm, where the farmer locks the nugget in the pen', async ({ page }) => {
+  const errors = await open(page, '?level=3');
+  await expect(page.locator('#level-3')).toHaveClass(/on/);
+  await expect(page.locator('#title-eyebrow')).toHaveText('Level 3: The Farm');
+  await page.locator('#btn-play').click();
+  await expect(page.locator('#cutscene')).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__nugget.mode)).toBe('farm');
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(4));
+  await expect(page.locator('#cutscene-text')).toContainText('chickens live on FARMS');
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(18));
+  await expect(page.locator('#cutscene-who')).toHaveText('The Farmer');
+  await expect(page.locator('#cutscene-text')).toHaveText("Huh, you're a chicken, right? Aren't you supposed to be in your pen?");
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(26));
+  await expect(page.locator('#cutscene-text')).toHaveText('Gotcha! Back in the pen you go.');
+  // the cutscene hands over to the game by itself at the end
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(30.9));
+  await expect.poll(() => page.evaluate(() => (window as any).__nugget.mode), { timeout: 5000 }).toBe('game');
+  await expect(page.locator('#hud')).toBeVisible();
+  await expect(page.locator('.key-slot')).toHaveCount(5);
+  await expect(page.locator('#hud-floor')).toHaveText('Clover Hill Farm');
+  await expect(page.locator('#hud-objective .obj-text')).toHaveText('Find the Red key');
+  await expect(page.locator('.toast').filter({ hasText: 'Locked in the chicken pen' })).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__nugget.state.maps[0].roomAt(27.5, 7.5).name)).toBe('Chicken Pen');
+  expect(errors).toEqual([]);
+});
+
+test('Level 3: the farmer catches the nugget with his rake and puts it back in the pen', async ({ page }) => {
+  const errors = await open(page, '?level=3&autostart&seed=1');
+  await page.waitForFunction(() => (window as any).__nugget.state.status === 'playing');
+  await page.evaluate(() => {
+    const s = (window as any).__nugget.state;
+    s.unlocked.add('red');
+    s.chasers = s.chasers.filter((c: any) => c.def.id === 'farmer');
+    const f = s.chasers[0];
+    f.pos = { x: 20.5, y: 18.5 }; f.facing = 0; f.lookBase = 0; f.pause = 5;
+    s.player.pos = { x: 23, y: 18.5 };
+  });
+  await expect(page.locator('.toast.danger').filter({ hasText: 'The Farmer put you back in the pen' })).toBeVisible({ timeout: 8000 });
+  await expect.poll(async () => { const s = await snap(page); return `${s.lives} ${s.status}`; }, { timeout: 8000 }).toBe('2 playing');
+  const s = await snap(page);
+  expect(Math.abs(s.x - 28.5) + Math.abs(s.y - 6.5)).toBeLessThan(1.5);
+  expect(errors).toEqual([]);
+});
+
+test('Level 3: mud slows the nugget down', async ({ page }) => {
+  const errors = await open(page, '?level=3&autostart&nofamily&seed=1');
+  await page.waitForFunction(() => (window as any).__nugget.state.status === 'playing');
+  await page.evaluate(() => { const s = (window as any).__nugget.state; s.unlocked.add('red'); s.player.pos = { x: 15.5, y: 23.5 }; });
+  await page.keyboard.down('ArrowRight');
+  await expect(page.locator('.toast').filter({ hasText: 'Sticky mud' })).toBeVisible({ timeout: 4000 });
+  expect(await page.evaluate(() => (window as any).__nugget.state.player.inMud)).toBe(true);
+  await page.keyboard.up('ArrowRight');
+  expect(errors).toEqual([]);
+});
+
+test('the robot player escapes the farm through the gold gate', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await open(page, '?level=3&autostart&nofamily&bot&speed=12&seed=1');
+  await expect.poll(async () => (await snap(page)).status, { timeout: 90_000, intervals: [250] }).toBe('won');
+  await expect(page.locator('#screen-win')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('#win-title')).toHaveText('You escaped the farm!');
+  await expect(page.locator('.key-slot.used')).toHaveCount(5);
+  await expect(page.locator('#btn-next')).toBeHidden();
+  await expect(page.locator('#win-next-note')).toBeHidden();
   expect(errors).toEqual([]);
 });
 
