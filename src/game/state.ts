@@ -23,6 +23,8 @@ export const INVULN_TIME = 2.2;
 export const SLIP_TIME = 0.75;
 export const SLIP_SPEED = 1.5;
 export const SPLASH_RANGE = 6.5;
+/** Mud puddles: walking speed while wading through (times normal). */
+export const MUD_SPEED = 0.5;
 
 export interface Input {
   mx: number;
@@ -62,6 +64,7 @@ export type GameEvent =
   | { type: 'refill' }
   | { type: 'bottle'; x: number; y: number }
   | { type: 'slip'; x: number; y: number }
+  | { type: 'mud'; x: number; y: number }
   | { type: 'rush'; x: number; y: number }
   | { type: 'cartCrash'; x: number; y: number }
   | { type: 'bumped' };
@@ -115,6 +118,8 @@ export interface Player {
   /** Sliding across a water spill: seconds left and the direction of the slide. */
   slip: number;
   slipDir: Vec;
+  /** Wading through mud right now. */
+  inMud: boolean;
 }
 
 export interface KeyItem {
@@ -181,6 +186,8 @@ export interface GameState {
   checkpoint: { floor: number; x: number; y: number };
   events: GameEvent[];
   lockedCd: number;
+  /** Seconds until the next "mud!" event can fire (so the toast doesn't repeat every step). */
+  mudCd: number;
   caughtBy: string | null;
   noBoss: boolean;
   /** Uncle Gus, once the nugget is out of the front door. */
@@ -241,6 +248,7 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
       stairsArmed: true,
       slip: 0,
       slipDir: { x: 0, y: 0 },
+      inMud: false,
       arriveDir: { x: 0, y: 0 },
     },
     rand: makeRandom(opts.seed ?? Math.floor(Math.random() * 2 ** 31)),
@@ -261,8 +269,9 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
     checkpoint: { floor: START.floor, x: START.x, y: START.y },
     events: [],
     lockedCd: 0,
+    mudCd: 0,
     caughtBy: null,
-    noBoss: !!opts.noBoss,
+    noBoss: !!opts.noBoss || level.boss === false,
     boss: null,
     shots: [],
     ketchup: 0,
@@ -357,6 +366,12 @@ export function findDoor(state: GameState, color: KeyColor) {
   return null;
 }
 
+/** A tile just in front of a door (for naming the room it is in). */
+function doorSpot(state: GameState, color: KeyColor): [number, number] {
+  const d = findDoor(state, color);
+  return d ? [d.door.x + 0.5, d.door.y - 0.5] : [0, 0];
+}
+
 export interface Objective {
   color: KeyColor;
   action: 'find' | 'open' | 'escape' | 'boss';
@@ -383,6 +398,9 @@ export function currentObjective(state: GameState): Objective | null {
         const b = bossDef(state);
         return { color, action: 'boss', text: `Squirt ketchup at ${b.the}!`, hint: `${state.difficulty === 'easy' ? `Squirt away: on Easy the ketchup flies at ${b.the} by itself.` : `Face ${b.the} and squirt: the ketchup goes the way you are facing.`} Dodge the ${b.throws}, stay out of the red ring, and when the bottle is empty grab the new one that appears.${b.stamp ? ' When the Manager slams the FIRED stamp, DASH through the shock wave!' : ''}` };
       }
+      if (color === 'gold' && goal?.room.outdoor) {
+        return { color, action: 'escape', text: `Run out to the ${goal.room.name}!`, hint: `The gate is open. Run through it to the ${goal.room.name} and freedom!` };
+      }
       if (color === 'gold' && goal) {
         return { color, action: 'escape', text: `Get into the ${goal.room.name}!`, hint: `The door is open. Run into the ${goal.room.name}!` };
       }
@@ -401,14 +419,21 @@ export function currentObjective(state: GameState): Objective | null {
         hint: `The ${label} key is in the ${roomNameOf(state, k.floor, k.x, k.y)} (${state.maps[k.floor].def.name}).`,
       };
     }
+    if (color === 'gold' && goal?.room.outdoor) return { color, action: 'open', text: 'Open the Gold farm gate!', hint: `The Gold gate at the bottom of the ${roomNameOf(state, 0, ...doorSpot(state, 'gold'))} leads out to the ${goal.room.name}.` };
     if (color === 'gold' && goal) return { color, action: 'open', text: `Open the ${goal.room.name}!`, hint: `The Gold door leads to the ${goal.room.name}.` };
     if (color === 'gold') return { color, action: 'open', text: 'Open the Gold front door!', hint: 'The front door is at the bottom of the Front Hall (Ground Floor).' };
     const dr = doorRoom(state, color)!;
+    // fenced-in places on the farm have gates, not doors
+    const door = dr.room.outdoor ? 'gate' : 'door';
+    const p = state.player;
+    const inside = p.floor === dr.floor && state.maps[p.floor].roomAt(p.pos.x, p.pos.y)?.id === dr.room.id;
     return {
       color,
       action: 'open',
-      text: `Open the ${label} door`,
-      hint: `The ${label} door leads to the ${dr.room.name} (${state.maps[dr.floor].def.name}).`,
+      text: `Open the ${label} ${door}`,
+      hint: inside
+        ? `The ${label} ${door} is the way out of the ${dr.room.name}.`
+        : `The ${label} ${door} leads to the ${dr.room.name} (${state.maps[dr.floor].def.name}).`,
     };
   }
   return null;
@@ -443,6 +468,7 @@ export function update(state: GameState, input: Input, dt: number) {
 
   state.time += dt;
   state.lockedCd = Math.max(0, state.lockedCd - dt);
+  state.mudCd = Math.max(0, state.mudCd - dt);
   updateFeast(state, dt);
   updatePlayer(state, input, dt);
   if (state.status !== 'playing') return;
@@ -540,7 +566,7 @@ function updateFeaster(state: GameState, c: Chaser, dt: number) {
 
 function respawn(state: GameState) {
   const p = state.player;
-  // In the store the staff put the nugget back on the frozen food shelf.
+  // In the store the staff put the nugget back on the frozen food shelf; on the farm, back in the pen.
   const back = state.level.shelf ?? state.checkpoint;
   p.floor = back.floor;
   p.pos = { x: back.x, y: back.y };
@@ -595,8 +621,16 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
     state.events.push({ type: 'dash' });
   }
 
+  const mudTx = Math.floor(p.pos.x), mudTy = Math.floor(p.pos.y);
+  const wasInMud = p.inMud;
+  p.inMud = map.isMud(mudTx, mudTy);
+  if (p.inMud && !wasInMud && p.moving) {
+    if (state.mudCd <= 0) state.events.push({ type: 'mud', x: p.pos.x, y: p.pos.y });
+    state.mudCd = 4;
+  }
+
   if (p.moving) {
-    const speed = PLAYER_SPEED * (p.dashTime > 0 ? DASH_MULT : 1);
+    const speed = PLAYER_SPEED * (p.dashTime > 0 ? DASH_MULT : 1) * (p.inMud ? MUD_SPEED : 1);
     p.facing = lerpAngle(p.facing, Math.atan2(my, mx), dt * 14);
     const walk = (x: number, y: number) => map.walkableForPlayer(x, y, state.unlocked);
     moveCircle(walk, p.pos, mx * speed * dt, my * speed * dt, PLAYER_RADIUS);
@@ -660,6 +694,7 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
   }
 
   // Level 2: made it into the Manager's Office (where the Manager catches the nugget snooping);
+  // Level 3: out of the farm gate onto the country road (free!);
   // Level 1: out through the front door (where Uncle Gus is waiting)
   const goal = goalRoom(state);
   const door = map.door(tx, ty);
@@ -893,7 +928,8 @@ function updateChaser(state: GameState, c: Chaser, dt: number) {
           state.events.push({ type: 'lost', id: c.def.id });
         }
       }
-      if (sameFloor && !p.hidden && p.invuln <= 0 && dist < PLAYER_RADIUS + FAMILY_RADIUS + 0.04) {
+      // the farmer's rake reaches a bit further than an arm
+      if (sameFloor && !p.hidden && p.invuln <= 0 && dist < PLAYER_RADIUS + FAMILY_RADIUS + 0.04 + (c.def.reach ?? 0)) {
         state.status = 'caught';
         state.statusTimer = CAUGHT_TIME;
         state.lives--;

@@ -127,6 +127,7 @@ function longSide(w: number, h: number) {
   return {
     len: alongZ ? h : w,
     depth: alongZ ? w : h,
+    vertical: alongZ,
     /** box helper in (along, y, across) coordinates */
     box: (b: Builder, a: number, y: number, c: number, la: number, hy: number, lc: number, color: string, o = {}) =>
       alongZ ? box(b, c, y, a, lc, hy, la, color, o) : box(b, a, y, c, la, hy, lc, color, o),
@@ -540,6 +541,228 @@ export function buildFurniture(it: Furniture): FurnitureBuild {
       box(b, 0.3, 0.65, 0.5, 0.6, 0.45, 0.04, '#ffffff'); // "employee of the month" photo
       box(b, 0.36, 0.71, 0.53, 0.48, 0.33, 0.01, '#9fd3c7');
       break;
+    // ------------------------------------------------ farm (Level 3)
+    case 'hay': {
+      // golden hay bales with twine: the nugget burrows in to hide
+      const R = rng(seed);
+      for (let x = 0; x < w; x++)
+        for (let z = 0; z < h; z++) {
+          const c = shade('#e3c46e', (R() - 0.5) * 0.15);
+          box(b, x + 0.06, 0, z + 0.08, 0.88, 0.62, 0.84, c, { rough: 1 });
+          for (const t of [0.3, 0.7]) box(b, x + 0.04, 0, z + t * 0.84 + 0.06, 0.92, 0.64, 0.03, '#a8742e');
+          for (let i = 0; i < 6; i++) box(b, x + 0.1 + R() * 0.7, 0.62, z + 0.1 + R() * 0.7, 0.18, 0.02, 0.02, shade(c, 0.12));
+        }
+      b.top = 0.62;
+      break;
+    }
+    case 'haystack': {
+      // a round, beehive-shaped haystack with loose straws sticking out
+      const R = rng(seed);
+      const r = Math.min(w, h) * 0.48;
+      cyl(b, w / 2, 0, h / 2, r, 1.0, '#e0bd62', { rough: 1 }, r * 0.92);
+      cone(b, w / 2, 1.0, h / 2, r * 0.98, 1.05, '#e8c86e', { rough: 1 });
+      for (let i = 0; i < 14; i++) {
+        const a = R() * Math.PI * 2;
+        const straw = box(b, w / 2 + Math.cos(a) * r * 0.95, 0.15 + R() * 0.8, h / 2 + Math.sin(a) * r * 0.95, 0.24, 0.025, 0.025, '#f2d886');
+        straw.rotation.set(0, -a, (R() - 0.5) * 0.8);
+      }
+      b.top = 2;
+      break;
+    }
+    case 'trough': {
+      const L = longSide(w, h);
+      L.box(b, 0.1, 0.12, 0.2, L.len - 0.2, 0.4, L.depth - 0.4, '#8a5a36');
+      L.box(b, 0.18, 0.3, 0.28, L.len - 0.36, 0.23, L.depth - 0.56, '#5fb7e8', { rough: 0.1, metal: 0.2 });
+      for (const a of [0.2, L.len - 0.3]) L.box(b, a, 0, 0.25, 0.1, 0.14, L.depth - 0.5, WOOD_D);
+      break;
+    }
+    case 'coop': {
+      // a little red hen house on stilts with a ramp
+      legs(b, w, h, 0.62, 0.15, WOOD_D, 0.06);
+      box(b, 0.05, 0.62, 0.05, w - 0.1, 0.75, h - 0.1, '#b5402f');
+      box(b, 0.25, 0.75, h - 0.06, 0.4, 0.4, 0.03, '#3a2416'); // hatch
+      for (let i = 0; i < 3; i++) box(b, 1.0 + i * 0.6, 0.85, h - 0.06, 0.35, 0.3, 0.02, '#f2d886');
+      const roof = box(b, -0.1, 1.35, -0.1, w + 0.2, 0.08, h + 0.2, '#6b4a3a');
+      roof.rotation.x = 0.12;
+      box(b, w / 2 - 0.2, 0.0, h - 0.05, 0.4, 0.04, 0.7, WOOD_L).rotation.x = -0.75;
+      b.top = 0.62;
+      break;
+    }
+    case 'hen': {
+      // a white hen: same shape as the nugget's cousins
+      ball(b, 0.5, 0.22, 0.5, 0.3, 0.26, 0.36, '#fbfaf4');
+      ball(b, 0.5, 0.42, 0.66, 0.16, 0.18, 0.16, '#fbfaf4');
+      cone(b, 0.5, 0.4, 0.78, 0.03, 0.06, '#f5a623').rotation.x = Math.PI / 2;
+      ball(b, 0.5, 0.53, 0.66, 0.05, 0.08, 0.1, '#d62828'); // comb
+      ball(b, 0.5, 0.3, 0.3, 0.12, 0.2, 0.08, '#efe8d8'); // tail
+      for (const x of [0.44, 0.56]) cyl(b, x, 0, 0.5, 0.015, 0.1, '#f5a623');
+      break;
+    }
+    case 'tractor': {
+      // a big green tractor: crawl under between the wheels
+      const L = longSide(w, h);
+      const body = '#3f8f4a';
+      L.box(b, 0.3, 0.6, 0.35, L.len - 0.6, 0.45, L.depth - 0.7, body, { rough: 0.5, metal: 0.2 });
+      L.box(b, L.len - 1.2, 1.05, 0.3, 0.9, 0.85, L.depth - 0.6, body, { rough: 0.5, metal: 0.2 }); // cab
+      L.box(b, L.len - 1.15, 1.25, 0.28, 0.8, 0.5, L.depth - 0.56, '#bfe6ff', { rough: 0.05, metal: 0.3 });
+      L.box(b, L.len - 1.3, 1.9, 0.2, 1.1, 0.06, L.depth - 0.4, '#f5c518');
+      L.box(b, 0.5, 1.05, L.depth / 2 - 0.06, 0.12, 0.6, 0.12, '#333'); // exhaust
+      const wheel = (a: number, d: number, r: number) => {
+        const m = L.vertical ? cyl(b, d, r, a, r, 0.32, '#222') : cyl(b, a, r, d, r, 0.32, '#222');
+        m.position.y = r;
+        m.rotation.set(L.vertical ? 0 : Math.PI / 2, 0, L.vertical ? Math.PI / 2 : 0);
+      };
+      for (const d of [0.12, L.depth - 0.12]) { wheel(L.len - 0.75, d, 0.6); wheel(0.6, d, 0.38); }
+      b.top = 0.6;
+      break;
+    }
+    case 'corn': {
+      // a row of tall corn: stalks, leaves and yellow cobs
+      const R = rng(seed);
+      for (let x = 0; x < w; x++)
+        for (let z = 0; z < h; z++)
+          for (let k = 0; k < 3; k++) {
+            const px = x + 0.2 + R() * 0.6, pz = z + 0.2 + R() * 0.6;
+            const tall = 1.9 + R() * 0.5;
+            cyl(b, px, 0, pz, 0.04, tall, shade('#6aa84f', (R() - 0.5) * 0.2));
+            for (let l = 0; l < 3; l++) {
+              const leaf = box(b, px - 0.02, 0.5 + l * 0.45, pz - 0.25, 0.04, 0.05, 0.5, shade('#4f8a3c', (R() - 0.5) * 0.2));
+              leaf.rotation.set(0.5, R() * Math.PI, 0);
+            }
+            if (R() < 0.6) ball(b, px + 0.06, 1.1 + R() * 0.4, pz, 0.08, 0.22, 0.08, '#f5c518');
+            cone(b, px, tall, pz, 0.06, 0.3, '#d9b25a');
+          }
+      b.top = 2.2;
+      break;
+    }
+    case 'cow': {
+      // a friendly black and white cow (or brown, with a color)
+      const L = longSide(w, h);
+      const hide = it.color ?? '#fbfaf4';
+      const spot = it.color ? shade(it.color, -0.3) : '#222222';
+      const g = builder(false, true);
+      ball(g, L.len / 2, 0.8, 0, L.len * 0.62, 0.62, 0.62, hide);
+      ball(g, L.len / 2 - 0.25, 0.92, 0.24, 0.35, 0.3, 0.2, spot);
+      ball(g, L.len / 2 + 0.3, 0.75, -0.25, 0.3, 0.32, 0.18, spot);
+      ball(g, L.len - 0.15, 1.0, 0, 0.36, 0.34, 0.32, hide); // head
+      ball(g, L.len + 0.02, 0.9, 0, 0.18, 0.16, 0.24, '#f2b8b0'); // nose
+      for (const s of [-1, 1]) {
+        ball(g, L.len - 0.05, 1.08, s * 0.1, 0.05, 0.06, 0.05, '#1d1410');
+        cone(g, L.len - 0.2, 1.15, s * 0.14, 0.03, 0.14, '#efe0b0');
+      }
+      for (const [a, d] of [[0.35, -0.18], [0.35, 0.18], [L.len - 0.55, -0.18], [L.len - 0.55, 0.18]]) cyl(g, a, 0, d, 0.06, 0.55, hide);
+      ball(g, L.len / 2 - 0.1, 0.48, 0, 0.18, 0.1, 0.16, '#f2b8b0');
+      g.group.position.set(L.vertical ? w / 2 : 0, 0, L.vertical ? 0 : h / 2);
+      g.group.rotation.y = L.vertical ? -Math.PI / 2 : 0;
+      b.group.add(g.group);
+      b.mats.push(...g.mats);
+      break;
+    }
+    case 'pigsty': {
+      // a low fence around a muddy patch with two pink pigs
+      for (let x = 0; x <= w; x += 0.5) for (const z of [0.05, h - 0.05]) box(b, x - 0.04, 0, z - 0.04, 0.08, 0.6, 0.08, WOOD);
+      for (let z = 0; z <= h; z += 0.5) for (const x of [0.05, w - 0.05]) box(b, x - 0.04, 0, z - 0.04, 0.08, 0.6, 0.08, WOOD);
+      for (const y of [0.25, 0.5]) {
+        box(b, 0, y, 0, w, 0.06, 0.05, WOOD_L);
+        box(b, 0, y, h - 0.08, w, 0.06, 0.05, WOOD_L);
+        box(b, 0, y, 0, 0.05, 0.06, h, WOOD_L);
+        box(b, w - 0.08, y, 0, 0.05, 0.06, h, WOOD_L);
+      }
+      box(b, 0.2, 0, 0.2, w - 0.4, 0.03, h - 0.4, '#5e4026', { rough: 0.3 });
+      for (const [px, pz, f] of [[1.4, 1.3, 0.4], [3.4, 2.5, -2.2]] as const) {
+        const pig = builder(false, true);
+        ball(pig, 0, 0.32, 0, 0.75, 0.5, 0.5, '#f4a7b9');
+        ball(pig, 0.42, 0.38, 0, 0.32, 0.32, 0.32, '#f4a7b9');
+        cyl(pig, 0.6, 0.34, 0, 0.08, 0.08, '#e88aa0').rotation.z = Math.PI / 2;
+        for (const s of [-1, 1]) {
+          ball(pig, 0.52, 0.47, s * 0.08, 0.04, 0.05, 0.04, '#1d1410');
+          ball(pig, 0.38, 0.55, s * 0.12, 0.08, 0.1, 0.04, '#e88aa0');
+        }
+        for (const [a, d] of [[-0.2, -0.13], [-0.2, 0.13], [0.2, -0.13], [0.2, 0.13]]) cyl(pig, a, 0, d, 0.05, 0.18, '#f4a7b9');
+        pig.group.position.set(px, 0, pz);
+        pig.group.rotation.y = f;
+        b.group.add(pig.group);
+        b.mats.push(...pig.mats);
+      }
+      break;
+    }
+    case 'well': {
+      cyl(b, w / 2, 0, h / 2, w * 0.42, 0.75, '#9e988a', { rough: 0.95 });
+      cyl(b, w / 2, 0.74, h / 2, w * 0.34, 0.02, '#2a4a6a', { rough: 0.1 });
+      for (const s of [-1, 1]) box(b, w / 2 + s * w * 0.36 - 0.05, 0.75, h / 2 - 0.05, 0.1, 1.0, 0.1, WOOD_D);
+      cyl(b, w / 2 - w * 0.36, 1.45, h / 2, 0.06, w * 0.72, WOOD).rotation.z = Math.PI / 2;
+      const roof = cone(b, w / 2, 1.65, h / 2, w * 0.55, 0.6, '#b5402f');
+      roof.rotation.y = Math.PI / 4;
+      cyl(b, w / 2, 0.95, h / 2, 0.12, 0.2, '#8a5a36'); // bucket
+      break;
+    }
+    case 'scarecrow': {
+      cyl(b, 0.5, 0, 0.5, 0.04, 1.8, WOOD_D);
+      box(b, -0.1, 1.3, 0.47, 1.2, 0.06, 0.06, WOOD_D);
+      box(b, 0.25, 0.85, 0.35, 0.5, 0.6, 0.3, '#5b8bd6'); // shirt
+      box(b, -0.05, 1.25, 0.4, 1.1, 0.14, 0.2, '#5b8bd6');
+      ball(b, 0.5, 1.68, 0.5, 0.32, 0.34, 0.32, '#e8d3a0'); // sack head
+      for (const s of [-1, 1]) ball(b, 0.5 + s * 0.07, 1.72, 0.66, 0.04, 0.04, 0.02, '#1d1410');
+      cyl(b, 0.5, 1.82, 0.5, 0.3, 0.03, '#d9b25a');
+      cyl(b, 0.5, 1.84, 0.5, 0.14, 0.16, '#d9b25a');
+      for (let i = 0; i < 4; i++) box(b, 0.1 + i * 0.25, 1.12, 0.48, 0.03, 0.14, 0.03, '#f2d886'); // straw
+      b.top = 1.9;
+      break;
+    }
+    case 'pumpkins': {
+      const R = rng(seed);
+      box(b, 0.05, 0, 0.05, w - 0.1, 0.02, h - 0.1, '#5e4026', { rough: 1 });
+      for (let i = 0; i < w * h * 2; i++) {
+        const x = 0.35 + R() * (w - 0.7), z = 0.35 + R() * (h - 0.7), s = 0.35 + R() * 0.25;
+        ball(b, x, s * 0.4, z, s, s * 0.75, s, shade('#f68b2a', (R() - 0.5) * 0.2));
+        cyl(b, x, s * 0.75, z, 0.03, 0.1, '#5e7a2a');
+      }
+      break;
+    }
+    case 'workbench':
+      table(b, w, h, 0.85, WOOD_L);
+      box(b, 0.1, 0.85, 0.1, w - 0.2, 0.02, 0.06, '#5e3b22');
+      box(b, 0.3, 0.85, 0.3, 0.5, 0.08, 0.3, '#c0392b', { metal: 0.4 }); // toolbox
+      box(b, 1.2, 0.85, 0.35, 0.35, 0.06, 0.06, '#7c858f', { metal: 0.6 }); // hammer
+      box(b, 1.2, 0.85, 0.28, 0.06, 0.06, 0.22, '#b07a4c');
+      // pegboard with tools behind it
+      box(b, 0.05, 0.9, 0.02, w - 0.1, 1.0, 0.04, '#d2b48c');
+      for (let i = 0; i < 5; i++) box(b, 0.4 + i * 0.7, 1.15, 0.06, 0.06, 0.5, 0.03, ['#7c858f', '#c0392b', '#f5c518'][i % 3], { metal: 0.4 });
+      b.top = 0.85;
+      break;
+    case 'barrel':
+      cyl(b, 0.5, 0, 0.5, 0.36, 0.95, WOOD, {}, 0.32);
+      for (const y of [0.15, 0.75]) cyl(b, 0.5, y, 0.5, 0.37, 0.05, '#555', { metal: 0.5 });
+      cyl(b, 0.5, 0.95, 0.5, 0.31, 0.02, WOOD_D);
+      break;
+    case 'wheelbarrow': {
+      box(b, 0.1, 0.4, 0.15, 0.8, 0.3, 0.7, '#3d7df0', { metal: 0.3, rough: 0.4 });
+      cyl(b, 0.5, 0.18, 0.92, 0.18, 0.08, '#222').rotation.x = Math.PI / 2;
+      for (const x of [0.2, 0.8]) {
+        box(b, x - 0.02, 0, 0.2, 0.04, 0.4, 0.04, '#555');
+        box(b, x - 0.02, 0.45, -0.1, 0.04, 0.04, 0.3, '#555');
+      }
+      b.top = 0.4;
+      break;
+    }
+    case 'milkCans':
+      for (const [x, z] of [[0.3, 0.3], [0.7, 0.35], [0.45, 0.72]]) {
+        cyl(b, x, 0, z, 0.15, 0.5, '#c9ced6', { metal: 0.7, rough: 0.3 });
+        cyl(b, x, 0.5, z, 0.09, 0.12, '#c9ced6', { metal: 0.7, rough: 0.3 });
+        cyl(b, x, 0.6, z, 0.11, 0.03, '#9aa3ad', { metal: 0.7 });
+      }
+      break;
+    case 'woodpile': {
+      const L = longSide(w, h);
+      for (let r = 0; r < 3; r++)
+        for (let i = 0; i < Math.floor(L.len * 3) - r; i++) {
+          const a = 0.18 + r * 0.16 + i * 0.32;
+          const log = L.vertical ? cyl(b, 0.5, 0.15 + r * 0.27, a, 0.15, 0.8, shade(WOOD_L, ((i * 7 + r) % 5) * 0.03), {}) : cyl(b, a, 0.15 + r * 0.27, 0.5, 0.15, 0.8, shade(WOOD_L, ((i * 7 + r) % 5) * 0.03));
+          log.position.y = 0.15 + r * 0.27;
+          log.rotation.set(L.vertical ? 0 : Math.PI / 2, 0, L.vertical ? Math.PI / 2 : 0);
+        }
+      break;
+    }
     default:
       box(b, 0.05, 0, 0.05, w - 0.1, 0.8, h - 0.1, WOOD);
   }

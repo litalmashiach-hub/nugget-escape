@@ -31,7 +31,9 @@ export interface Vec {
   y: number;
 }
 
-export type FloorStyle = 'wood' | 'parquet' | 'checker' | 'bathTile' | 'carpetBlue' | 'carpetRose' | 'attic' | 'living' | 'storeTile' | 'concrete' | 'officeCarpet';
+export type FloorStyle = 'wood' | 'parquet' | 'checker' | 'bathTile' | 'carpetBlue' | 'carpetRose' | 'attic' | 'living' | 'storeTile' | 'concrete' | 'officeCarpet'
+  // farm (Level 3)
+  | 'grass' | 'dirt' | 'straw' | 'barn' | 'road';
 
 export type FurnitureKind =
   | 'counter' | 'fridge' | 'island' | 'kitchenTable' | 'diningTable' | 'sideboard' | 'cabinet' | 'plant'
@@ -41,10 +43,13 @@ export type FurnitureKind =
   | 'nightstand' | 'dresser' | 'rocker' | 'boxes' | 'trunk' | 'coveredSofa' | 'mannequin'
   | 'teepee' | 'toyBox' | 'rockingHorse' | 'roundTable' | 'gameTable' | 'runner'
   // grocery store (Level 2)
-  | 'shelf' | 'freezer' | 'produce' | 'checkout' | 'deli' | 'cart' | 'rack' | 'pallet' | 'bakery' | 'officeDesk' | 'trophyCase';
+  | 'shelf' | 'freezer' | 'produce' | 'checkout' | 'deli' | 'cart' | 'rack' | 'pallet' | 'bakery' | 'officeDesk' | 'trophyCase'
+  // farm (Level 3)
+  | 'hay' | 'haystack' | 'trough' | 'coop' | 'hen' | 'tractor' | 'corn' | 'cow' | 'pigsty' | 'well' | 'scarecrow'
+  | 'pumpkins' | 'workbench' | 'barrel' | 'wheelbarrow' | 'milkCans' | 'woodpile';
 
-/** Furniture tall enough to block sight (store shelves and racks). */
-export const TALL_FURNITURE: ReadonlySet<FurnitureKind> = new Set<FurnitureKind>(['shelf', 'rack']);
+/** Furniture tall enough to block sight (store shelves and racks, rows of corn, haystacks). */
+export const TALL_FURNITURE: ReadonlySet<FurnitureKind> = new Set<FurnitureKind>(['shelf', 'rack', 'corn', 'haystack']);
 
 /**
  * solid: blocks everyone.
@@ -71,13 +76,17 @@ export interface RoomDef {
   wall: string;
   /** Door color for rooms behind a locked door. Hallways have none. */
   door?: KeyColor;
+  /** Out in the open (farm yards and fields): fenced in rather than walled. */
+  outdoor?: boolean;
 }
 
 export type FamilyKind = 'dad' | 'mom' | 'sister' | 'grandma' | 'brother' | 'dog'
   // grocery store employees (Level 2)
   | 'cashier' | 'stocker' | 'butcher' | 'clerk'
   // a shopper pushing a cart (Level 2 hazard, not a chaser)
-  | 'shopper';
+  | 'shopper'
+  // the farm (Level 3): the farmer carries a rake
+  | 'farmer' | 'farmhand';
 
 export interface FamilyDef {
   id: string;
@@ -90,6 +99,8 @@ export interface FamilyDef {
   visionRange: number;
   fovDeg: number;
   giveUp: number;
+  /** Extra catching reach in tiles (the farmer's rake). */
+  reach?: number;
 }
 
 export interface FloorDef {
@@ -106,6 +117,8 @@ export interface FloorDef {
   lights: [number, number][];
   /** Slippery water spills as [x, y, w, h] tile rectangles (Level 2). */
   spills?: [number, number, number, number][];
+  /** Sticky mud puddles as [x, y, w, h] tile rectangles (Level 3): the nugget wades through slowly. */
+  mud?: [number, number, number, number][];
 }
 
 export type Difficulty = 'easy' | 'normal' | 'hard';

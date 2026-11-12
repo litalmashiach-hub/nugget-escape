@@ -6,6 +6,7 @@ import { SECRETS } from './game/secrets';
 import { KEY_INFO, type Difficulty } from './game/types';
 import type { LevelId } from './game/levels';
 import { STREET_LENGTH } from './render/street';
+import { FARM_LENGTH } from './render/farm';
 import { Scene } from './render/scene';
 import { CUTSCENE_LENGTH, BOSS_INTRO_LENGTH } from './render/cutscene';
 import { OFFICE_INTRO_LENGTH } from './render/office';
@@ -18,7 +19,7 @@ const STEP = 1 / 60;
 const params = new URLSearchParams(location.search);
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-type Mode = 'menu' | 'cutscene' | 'bossCutscene' | 'street' | 'game' | 'paused' | 'ended';
+type Mode = 'menu' | 'cutscene' | 'bossCutscene' | 'street' | 'farm' | 'game' | 'paused' | 'ended';
 
 function fmtTime(s: number) {
   const m = Math.floor(s / 60);
@@ -43,21 +44,23 @@ function saveBest(d: Difficulty, t: number, level: LevelId = 1) {
   }
 }
 
-/** Level 2 opens once Level 1 has been beaten (remembered on this device). */
-function level2Unlocked() {
+/** Level 2 opens once Level 1 has been beaten, Level 3 once Level 2 has (remembered on this device). */
+function levelUnlocked(id: LevelId) {
+  if (id === 1) return true;
   try {
-    return localStorage.getItem('nugget-level2') === '1';
+    return localStorage.getItem(`nugget-level${id}`) === '1';
   } catch {
     return false;
   }
 }
-function unlockLevel2() {
+function unlockLevel(id: LevelId) {
   try {
-    localStorage.setItem('nugget-level2', '1');
+    localStorage.setItem(`nugget-level${id}`, '1');
   } catch {
     /* storage unavailable: it stays unlocked until the page reloads */
   }
 }
+const LEVEL_NAMES: Record<LevelId, string> = { 1: 'The House', 2: 'The Grocery Store', 3: 'The Farm' };
 
 /** Software renderers (headless browsers, old machines) get the cheap lighting path. */
 function wantLowFx() {
@@ -91,8 +94,11 @@ async function boot() {
   const useBot = params.has('bot');
   const speed = Math.max(1, Math.min(20, Number(params.get('speed')) || 1));
 
-  let level2Open = level2Unlocked() || params.get('level') === '2';
-  let level: LevelId = params.get('level') === '2' ? 2 : 1;
+  const askLevel = Number(params.get('level'));
+  // ?level=N opens that level (and the ones before it) for testing
+  const openLevels = new Set<LevelId>([1]);
+  for (const id of [2, 3] as const) if (levelUnlocked(id) || askLevel >= id) openLevels.add(id);
+  let level: LevelId = askLevel === 2 || askLevel === 3 ? askLevel : 1;
   let state: GameState = createGame(difficulty, opts);
   let nextTimer = 0;
   let nextTick = 0;
@@ -118,25 +124,29 @@ async function boot() {
 
   const showBest = () => {
     const b = loadBest(difficulty, level);
-    $('best-time').textContent = b ? `Best ${level === 2 ? 'Level 2 time' : 'escape'} on ${difficulty}: ${fmtTime(b)}` : '';
+    $('best-time').textContent = b ? `Best ${level > 1 ? `Level ${level} time` : 'escape'} on ${difficulty}: ${fmtTime(b)}` : '';
   };
   showBest();
 
-  // Level buttons (Level 2 stays locked until Level 1 is beaten)
+  // Level buttons (each level stays locked until the one before it is beaten)
   const story1 = { eyebrow: $('title-eyebrow').textContent!, story: $('title-story').textContent! };
   const story2 = {
     eyebrow: 'Level 2: The Grocery Store',
     story: 'Free at last, the nugget wonders: why am I alive? Maybe the answer is in the grocery store! Sneak past the staff, who want to put you back on the shelf and win Employee of the Month. Find the keys and get into the Manager\'s Office.',
   };
+  const story3 = {
+    eyebrow: 'Level 3: The Farm',
+    story: 'Nuggets come from chickens, and chickens live on farms! The nugget rides the bus to the farm for answers, but the farmer thinks it\'s a runaway chicken and locks it in the pen. Escape the pen, then escape the farm, and watch out for the farmer and his rake!',
+  };
   const syncLevels = () => {
     document.querySelectorAll<HTMLButtonElement>('.levels button').forEach((b) => {
       const id = Number(b.dataset.level) as LevelId;
-      b.disabled = id === 2 && !level2Open;
+      b.disabled = !openLevels.has(id);
       const on = id === level;
       b.classList.toggle('on', on);
       b.setAttribute('aria-checked', String(on));
     });
-    const st = level === 2 ? story2 : story1;
+    const st = level === 3 ? story3 : level === 2 ? story2 : story1;
     $('title-eyebrow').textContent = st.eyebrow;
     $('title-story').textContent = st.story;
   };
@@ -187,7 +197,7 @@ async function boot() {
     $('win-next-note').hidden = true;
   };
 
-  /** Play the level's opening cutscene (dinner, or the walk to the store), then start. */
+  /** Play the level's opening cutscene (dinner, the walk to the store, or the bus to the farm), then start. */
   function playCutscene() {
     cancelNext();
     sound.unlock();
@@ -197,9 +207,10 @@ async function boot() {
     scene.reset();
     scene.cutscene.reset();
     scene.street.reset();
+    scene.farm.reset();
     hud.reset();
     lastCaption = '';
-    mode = level === 2 ? 'street' : 'cutscene';
+    mode = level === 3 ? 'farm' : level === 2 ? 'street' : 'cutscene';
     show(null);
     $('hud').hidden = true;
     $('touch').hidden = true;
@@ -209,7 +220,7 @@ async function boot() {
 
   function endCutscene() {
     if (mode === 'bossCutscene') return endBossCutscene();
-    if (mode !== 'cutscene' && mode !== 'street') return;
+    if (mode !== 'cutscene' && mode !== 'street' && mode !== 'farm') return;
     $('cutscene').hidden = true;
     start(true);
     fadeIn();
@@ -268,7 +279,8 @@ async function boot() {
     sound.startMusic();
     const first = KEY_INFO[state.level.keyOrder[0]];
     const keyHtml = `<b style="color:${first.hex}">${first.label} key</b>`;
-    if (level === 2) hud.toast(`Sneak past the staff and find the ${keyHtml}!`, '', 3200);
+    if (level === 3) hud.toast(`Locked in the chicken pen! Find the ${keyHtml} to open the gate.`, '', 3600);
+    else if (level === 2) hud.toast(`Sneak past the staff and find the ${keyHtml}!`, '', 3200);
     else hud.toast(afterCutscene ? `Run! Find the ${keyHtml} first.` : `Hop off the plate and find the ${keyHtml}!`, '', 3200);
   }
 
@@ -288,10 +300,11 @@ async function boot() {
     show('screen-title');
   }
 
-  /** Straight from the Level 1 win screen into Level 2. */
-  function playLevel2() {
-    level = 2;
-    level2Open = true;
+  /** Straight from a win screen into the next level. */
+  function playNext() {
+    if (state.level.id >= 3) return;
+    level = (state.level.id + 1) as LevelId;
+    openLevels.add(level);
     syncLevels();
     playCutscene();
   }
@@ -371,7 +384,7 @@ async function boot() {
   $('btn-again').addEventListener('click', restart);
   $('btn-retry').addEventListener('click', restart);
   $('btn-win-menu').addEventListener('click', toMenu);
-  $('btn-next').addEventListener('click', playLevel2);
+  $('btn-next').addEventListener('click', playNext);
   $('btn-over-menu').addEventListener('click', toMenu);
   $('btn-pause').addEventListener('click', togglePause);
   $('btn-sound').addEventListener('click', toggleMute);
@@ -389,19 +402,18 @@ async function boot() {
   controls.bindTouch($('stick'), $('stick-knob'), $('dash-btn'));
   controls.bindFire($('fire-btn'));
   controls.bindMouse($('stage'));
-  // Secret code for testing: typing "shalevisbest" unlocks Level 2 without beating Level 1.
+  // Secret code for testing: typing "shalevisbest" unlocks Levels 2 and 3 without beating the ones before.
   // (On phones: tap the game title 5 times to type it in.)
   const CHEAT = 'shalevisbest';
   let typed = '';
   const tryCode = (code: string) => {
     if (code.toLowerCase().replace(/\s+/g, '') !== CHEAT) return false;
-    unlockLevel2();
-    level2Open = true;
+    for (const id of [2, 3] as const) { unlockLevel(id); openLevels.add(id); }
     syncLevels();
     sound.unlock();
     sound.secret();
     const note = $('cheat-note');
-    note.textContent = 'Secret code accepted: Level 2 unlocked!';
+    note.textContent = 'Secret code accepted: Levels 2 and 3 unlocked!';
     note.hidden = false;
     return true;
   };
@@ -424,7 +436,7 @@ async function boot() {
 
   window.addEventListener('keydown', (e) => {
     if (mode === 'menu' && e.code === 'Enter') playCutscene();
-    else if ((mode === 'cutscene' || mode === 'bossCutscene' || mode === 'street') && (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter')) {
+    else if ((mode === 'cutscene' || mode === 'bossCutscene' || mode === 'street' || mode === 'farm') && (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter')) {
       e.preventDefault();
       endCutscene();
     }
@@ -470,7 +482,7 @@ async function boot() {
         const info = KEY_INFO[e.color];
         sound.unlock_();
         hud.toast(e.color === 'gold'
-          ? `<span class="sw" style="background:#f5c518;color:#f5c518"></span>${state.level.id === 2 ? "The Manager's Office is open! Get inside!" : 'The front door is open! Run outside!'}`
+          ? `<span class="sw" style="background:#f5c518;color:#f5c518"></span>${state.level.id === 3 ? 'The farm gate is open! Run out to the road!' : state.level.id === 2 ? "The Manager's Office is open! Get inside!" : 'The front door is open! Run outside!'}`
           : `<span class="sw" style="background:${info.hex};color:${info.hex}"></span>${info.label} door unlocked`);
         break;
       }
@@ -497,7 +509,7 @@ async function boot() {
         sound.caught();
         const c = state.chasers.find((c) => c.def.id === e.by)!;
         const lives = `${state.lives} ${state.lives === 1 ? 'life' : 'lives'} left.`;
-        if (state.level.shelf) hud.toast(state.lives > 0 ? `${c.def.name} put you back on the shelf! ${lives}` : `${c.def.name} caught you!`, 'danger', 2600);
+        if (state.level.shelf) hud.toast(state.lives > 0 ? `${c.def.name} put you ${state.level.caughtTo ?? 'back on the shelf'}! ${lives}` : `${c.def.name} caught you!`, 'danger', 2600);
         else hud.toast(state.lives > 0 ? `${c.def.name} caught you! ${lives}` : `${c.def.name} caught you!`, 'danger', 2400);
         break;
       }
@@ -547,6 +559,10 @@ async function boot() {
         sound.pop();
         hud.toast('A ketchup bottle appeared! Grab it!', '', 2000);
         break;
+      case 'mud':
+        sound.step_();
+        hud.toast('Squelch! Sticky mud slows you down. Go around it!', 'danger', 1800);
+        break;
       case 'slip':
         sound.whoosh();
         hud.toast('Whoa! Slippery! The splash made some noise...', 'danger', 1800);
@@ -580,19 +596,24 @@ async function boot() {
         const isBest = best === null || state.time < best;
         if (isBest) saveBest(state.difficulty, state.time, lv);
         const stars = Math.max(1, 3 - state.timesCaught);
-        const firstWin = lv === 1 && !level2Unlocked();
-        if (lv === 1) { unlockLevel2(); level2Open = true; }
+        const next = (lv + 1) as LevelId;
+        const hasNext = lv < 3;
+        const firstWin = hasNext && !levelUnlocked(next);
+        if (hasNext) { unlockLevel(next); openLevels.add(next); }
         setTimeout(() => {
           if (mode !== 'ended') return;
-          $('win-eyebrow').textContent = lv === 2 ? 'Employee of the month? Not today!' : 'Freedom!';
-          $('win-title').textContent = lv === 2 ? (state.boss ? 'You beat the Manager!' : "You made it to the Manager's Office!") : 'You escaped!';
+          $('win-eyebrow').textContent = lv === 3 ? 'Free range!' : lv === 2 ? 'Employee of the month? Not today!' : 'Freedom!';
+          $('win-title').textContent = lv === 3 ? 'You escaped the farm!' : lv === 2 ? (state.boss ? 'You beat the Manager!' : "You made it to the Manager's Office!") : 'You escaped!';
           const sub = $('win-sub');
           sub.hidden = lv === 1 && !firstWin;
-          sub.textContent = lv === 2
-            ? 'A sticky note on the manager\'s desk says: "Why are you alive? To go on adventures, little nugget!"'
-            : 'Level 2 unlocked: The Grocery Store!';
+          sub.textContent = lv === 3
+            ? 'Out on the country road, the nugget is free. Chickens live on farms, but a nugget? A nugget lives wherever it wants!'
+            : lv === 2
+            ? `A sticky note on the manager's desk says: "Why are you alive? To go on adventures, little nugget!"${firstWin ? ` Level 3 unlocked: ${LEVEL_NAMES[3]}!` : ''}`
+            : `Level 2 unlocked: ${LEVEL_NAMES[2]}!`;
           $('win-secrets-box').hidden = !state.level.secrets;
-          $('btn-next').hidden = lv !== 1;
+          $('btn-next').hidden = !hasNext;
+          $('btn-next').textContent = `Play Level ${next}`;
           $('win-stars').innerHTML = [0, 1, 2].map((i) => `<span class="s ${i < stars ? 'on' : ''}" style="animation-delay:${0.2 + i * 0.18}s">★</span>`).join('');
           $('win-time').textContent = fmtTime(state.time);
           $('win-spotted').textContent = String(state.timesSpotted);
@@ -601,15 +622,15 @@ async function boot() {
           $('win-best').textContent = isBest ? 'New!' : fmtTime(best!);
           $('touch').hidden = true;
           show('screen-win');
-          if (lv === 1) {
-            // Level 2 starts by itself after a short countdown (or straight away with the button).
+          if (hasNext) {
+            // the next level starts by itself after a short countdown (or straight away with the button)
             let left = useBot ? 1 : 8;
             const note = $('win-next-note');
-            const tick = () => { note.textContent = `Level 2 starts in ${left}…`; };
+            const tick = () => { note.textContent = `Level ${next} starts in ${left}…`; };
             note.hidden = false;
             tick();
             nextTick = window.setInterval(() => { left = Math.max(0, left - 1); tick(); }, 1000);
-            nextTimer = window.setTimeout(() => { cancelNext(); if (mode === 'ended') playLevel2(); }, left * 1000);
+            nextTimer = window.setTimeout(() => { cancelNext(); if (mode === 'ended') playNext(); }, left * 1000);
             $('btn-next').focus({ preventScroll: true });
           }
         }, 1600);
@@ -625,6 +646,8 @@ async function boot() {
           ? 'Uncle Gus got you! Keep moving, dodge the drumsticks and jump away from his belly slam.'
           : state.caughtBy === 'A shopper with a cart'
           ? 'A shopping cart ran you over one time too many. When a shopper shouts "!", step out of the way!'
+          : state.level.id === 3
+          ? `${state.caughtBy ?? 'The Farmer'} put you back in the pen for good. Hide in the hay bales, under the tractor and the coop, and keep out of the mud!`
           : state.level.shelf
           ? `${state.caughtBy ?? 'The staff'} put you back on the shelf for good. Hide under the fruit stands and shopping carts!`
           : `${state.caughtBy ?? 'The family'} caught you one time too many. Try sneaking and hiding under furniture!`;
@@ -643,8 +666,9 @@ async function boot() {
   function cutsceneFrame(dt: number) {
     const boss = mode === 'bossCutscene';
     const street = mode === 'street';
+    const farm = mode === 'farm';
     const office = boss && state.level.id === 2;
-    const cs = office ? scene.officeCut : boss ? scene.bossCut : street ? scene.street : scene.cutscene;
+    const cs = office ? scene.officeCut : boss ? scene.bossCut : farm ? scene.farm : street ? scene.street : scene.cutscene;
     for (const e of cs.events) {
       if (e === 'gasp') sound.alert();
       else if (e === 'jump') sound.dash();
@@ -669,7 +693,7 @@ async function boot() {
         caption.classList.add('in');
       }
     }
-    bar.style.transform = `scaleX(${cs.t / (office ? OFFICE_INTRO_LENGTH : boss ? BOSS_INTRO_LENGTH : street ? STREET_LENGTH : CUTSCENE_LENGTH)})`;
+    bar.style.transform = `scaleX(${cs.t / (office ? OFFICE_INTRO_LENGTH : boss ? BOSS_INTRO_LENGTH : farm ? FARM_LENGTH : street ? STREET_LENGTH : CUTSCENE_LENGTH)})`;
     $('cutscene').style.setProperty('--fade', String(cs.fade));
     if (cs.done) endCutscene();
     void dt;
@@ -696,8 +720,8 @@ async function boot() {
       sound.intensity = state.boss && state.status === 'boss' ? 1 : state.chasers.some((c) => c.floor === state.player.floor && (c.mode === 'chase' || c.mode === 'alert')) ? 1 : 0;
       scene.render(state, dt, 'game');
       hud.update(state);
-    } else if (mode === 'cutscene' || mode === 'bossCutscene' || mode === 'street') {
-      scene.render(state, dt * speed, mode === 'cutscene' ? 'cutscene' : mode === 'street' ? 'street' : 'bossIntro');
+    } else if (mode === 'cutscene' || mode === 'bossCutscene' || mode === 'street' || mode === 'farm') {
+      scene.render(state, dt * speed, mode === 'cutscene' ? 'cutscene' : mode === 'street' ? 'street' : mode === 'farm' ? 'farm' : 'bossIntro');
       cutsceneFrame(dt);
     } else {
       scene.render(state, dt, mode === 'menu' ? 'menu' : 'game');
@@ -709,14 +733,14 @@ async function boot() {
   (window as unknown as { __nugget: unknown }).__nugget = {
     get state() { return state; },
     get mode() { return mode; },
-    get cutsceneTime() { return mode === 'bossCutscene' ? (state.level.id === 2 ? scene.officeCut : scene.bossCut).t : mode === 'street' ? scene.street.t : scene.cutscene.t; },
+    get cutsceneTime() { return mode === 'bossCutscene' ? (state.level.id === 2 ? scene.officeCut : scene.bossCut).t : mode === 'farm' ? scene.farm.t : mode === 'street' ? scene.street.t : scene.cutscene.t; },
     get level() { return level; },
-    /** Pick a level as if from the menu (Level 2 must be unlocked, or ?level=2 used). */
-    setLevel: (id: LevelId) => { if (id === 1 || level2Open) { level = id; syncLevels(); } return level; },
+    /** Pick a level as if from the menu (it must be unlocked, or ?level=N used). */
+    setLevel: (id: LevelId) => { if (openLevels.has(id)) { level = id; syncLevels(); } return level; },
     start: () => start(),
     playCutscene,
     skipCutscene: endCutscene,
-    seekCutscene: (t: number) => { if (mode === 'bossCutscene') (state.level.id === 2 ? scene.officeCut : scene.bossCut).t = t; else if (mode === 'street') scene.street.t = t; else scene.cutscene.t = t; },
+    seekCutscene: (t: number) => { if (mode === 'bossCutscene') (state.level.id === 2 ? scene.officeCut : scene.bossCut).t = t; else if (mode === 'farm') scene.farm.t = t; else if (mode === 'street') scene.street.t = t; else scene.cutscene.t = t; },
     /** Jump straight to the front door, as if every key had been found. */
     toFrontDoor: () => {
       level = 1;
@@ -731,7 +755,7 @@ async function boot() {
     },
     /** Level 2: jump into the Manager's Office, as if every key had been found. */
     toOffice: () => {
-      if (mode !== 'game' || state.level.id !== 2) { level2Open = true; level = 2; syncLevels(); start(); }
+      if (mode !== 'game' || state.level.id !== 2) { openLevels.add(2); level = 2; syncLevels(); start(); }
       for (const k of state.keys) { k.taken = true; state.held.add(k.color); state.unlocked.add(k.color); }
       state.carts = [];
       state.player.pos = { ...MANAGER.entry };
@@ -739,6 +763,13 @@ async function boot() {
       state.boss = makeBoss(state);
       state.shots = [];
       onEvent({ type: 'bossIntro' });
+    },
+    /** Level 3: stand just inside the farm gate, as if every key had been found. */
+    toGate: () => {
+      if (mode !== 'game' || state.level.id !== 3) { openLevels.add(3); level = 3; syncLevels(); start(); }
+      state.status = 'playing';
+      for (const k of state.keys) { k.taken = true; state.held.add(k.color); state.unlocked.add(k.color); }
+      state.player.pos = { x: 28, y: 35.5 };
     },
     toMenu,
   };
