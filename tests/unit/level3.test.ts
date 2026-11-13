@@ -4,6 +4,7 @@ import {
   type GameState, type Input,
 } from '../../src/game/state';
 import { botInput, solveHouse } from '../../src/game/bot';
+import { beginBossFight, FARMER } from '../../src/game/boss';
 import { canSee } from '../../src/game/vision';
 import { FARM, LEVEL3, LEVELS } from '../../src/game/levels';
 import { buildMaps } from '../../src/game/map';
@@ -61,8 +62,8 @@ describe('level 3: the farm', () => {
     expect(s.chasers.map((c) => c.def.kind)).toEqual(['farmer', 'dog', 'farmhand', 'dog']);
     expect(currentObjective(s)?.text).toBe('Find the Red key');
     expect(currentObjective(s)?.hint).toContain('Chicken Pen');
-    // no boss on the farm, no easter eggs either
-    expect(s.noBoss).toBe(true);
+    // the Farmer is waiting out on the road for a boss fight; no easter eggs on the farm
+    expect(s.noBoss).toBe(false);
     expect(canFeast(s)).toBe(false);
   });
 
@@ -145,7 +146,7 @@ describe('level 3: the farm', () => {
     }
   });
 
-  it('the gold gate leads out to the country road, and stepping onto it wins (no boss)', () => {
+  it('the gold gate leads out to the country road, where the Farmer boss fight starts', () => {
     const s = createGame('normal', { level: 3, noFamily: true, seed: 1 });
     skipIntro(s);
     for (const c of LEVEL3.keyOrder) s.held.add(c);
@@ -154,20 +155,26 @@ describe('level 3: the farm', () => {
     s.player.pos = { x: 28, y: 35.5 };
     const ev = run(s, 3, () => ({ mx: 0, my: 1, dash: false }));
     expect(ev).toContain('unlock');
-    expect(ev).toContain('win');
-    expect(ev).not.toContain('bossIntro');
-    expect(s.status).toBe('won');
-    expect(s.boss).toBeNull();
+    expect(ev).toContain('bossIntro');
+    expect(ev).not.toContain('win');
+    expect(s.status).toBe('bossIntro');
+    expect(s.boss?.mode).toBe('arrive');
+    beginBossFight(s);
+    expect(s.status).toBe('boss');
+    expect(s.player.pos).toEqual(FARMER.entry);
   });
 
-  it('the robot player escapes the whole farm with nobody around', () => {
+  it('the robot player escapes the whole farm with nobody around, and beats the Farmer', () => {
     for (const d of ['easy', 'normal', 'hard'] as const) {
       const s = createGame(d, { level: 3, noFamily: true, seed: 3 });
       run(s, 240, botInput);
-      expect(s.status, d).toBe('won');
+      expect(s.status, d).toBe('bossIntro');
       expect(s.held.size).toBe(8);
+      beginBossFight(s);
+      run(s, 200, botInput);
+      expect(s.status, d).toBe('won');
     }
-  });
+  }, 20_000);
 
   it('the bus cutscene: night in the city, morning at the farm', () => {
     expect(farmSky(0)).toBe(0);

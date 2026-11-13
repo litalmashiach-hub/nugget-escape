@@ -830,3 +830,165 @@ export type FamilyModel = PersonModel | DogModel;
 export function makeFamily(kind: FamilyKind): FamilyModel {
   return kind === 'dog' ? new DogModel() : new PersonModel(kind);
 }
+
+// ---------------------------------------------------------------- the Farmer boss (Level 3)
+
+/**
+ * The Farmer as a boss: riding his big green tractor (phase 1), then on foot with a rake
+ * that shoots out to hook the nugget (phase 2). The tractor stays behind as a burnt wreck.
+ * Faces +z like every model.
+ */
+export class FarmerBossModel {
+  readonly root = new THREE.Group();
+  readonly farmer = new PersonModel('farmer');
+  /** The tractor (or, after the explosion, its smoking wreck). */
+  readonly tractor = new THREE.Group();
+  private chassis = new THREE.Group();
+  private wheels: THREE.Mesh[] = [];
+  private tractorMats: THREE.MeshStandardMaterial[] = [];
+  /** The long rake that reaches out: a handle along +z with the toothed head at the end. */
+  private reach = new THREE.Group();
+  private handle: THREE.Mesh;
+  private rakeHead = new THREE.Group();
+  private stars = new THREE.Group();
+  private wrecked = false;
+
+  constructor() {
+    this.farmer.root.scale.setScalar(1.2);
+    this.root.add(this.farmer.root);
+    // ------------------------------------------------ tractor
+    const b = builder(true, false);
+    const body = '#3f8f4a', metal = { rough: 0.45, metal: 0.25 };
+    this.tractor.add(this.chassis);
+    const add = (m: THREE.Mesh) => { this.chassis.add(m); return m; };
+    add(cbox(b, 0, 0.75, 0.35, 0.95, 0.6, 1.7, body, metal)); // hood and engine
+    add(cbox(b, 0, 0.62, -0.55, 1.25, 0.35, 0.9, body, metal)); // back, under the seat
+    add(cbox(b, 0, 1.08, 1.12, 0.7, 0.12, 0.1, '#d9dde2', { metal: 0.6, rough: 0.3 })); // grille top
+    add(cbox(b, 0, 0.8, 1.21, 0.75, 0.4, 0.04, '#2a2a2a')); // grille
+    for (const sx of [-0.28, 0.28]) add(ball(b, sx, 0.98, 1.22, 0.1, 0.1, 0.04, '#fff6c8', { emissive: '#fff2b0', emissiveIntensity: 0.6 })); // headlights
+    add(cbox(b, 0.3, 1.35, 0.75, 0.09, 0.7, 0.09, '#333')); // exhaust pipe
+    add(cbox(b, 0, 0.98, -0.62, 0.55, 0.12, 0.45, '#2a2a2a')); // seat
+    add(cbox(b, 0, 1.25, -0.85, 0.55, 0.45, 0.08, '#2a2a2a')); // seat back
+    add(cbox(b, 0, 1.25, -0.05, 0.08, 0.5, 0.08, '#333')); // steering column
+    const wheelGeo = new THREE.CylinderGeometry(1, 1, 1, 20);
+    const wheel = (x: number, z: number, r: number, w: number) => {
+      const g = new THREE.Mesh(wheelGeo, mat('#222', { rough: 0.9 }));
+      g.scale.set(r, w, r);
+      g.rotation.z = Math.PI / 2;
+      g.position.set(x, r, z);
+      g.castShadow = true;
+      const hub = new THREE.Mesh(wheelGeo, mat('#f5c518', { rough: 0.5 }));
+      hub.scale.set(0.5, 1.04, 0.5);
+      g.add(hub);
+      this.tractor.add(g);
+      this.wheels.push(g);
+    };
+    for (const s of [-1, 1]) {
+      wheel(s * 0.78, -0.55, 0.62, 0.36);
+      wheel(s * 0.6, 0.85, 0.36, 0.24);
+      add(cbox(b, s * 0.78, 1.28, -0.55, 0.42, 0.06, 1.0, body, metal)); // fenders
+    }
+    this.tractorMats = b.mats as THREE.MeshStandardMaterial[];
+    this.tractor.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+    this.root.add(this.tractor);
+    // ------------------------------------------------ the long rake
+    const rb = builder(false, false);
+    this.handle = new THREE.Mesh(GEO.cyl, mat('#b07a4c', { rough: 0.8 }));
+    this.handle.rotation.x = Math.PI / 2;
+    this.handle.castShadow = true;
+    this.reach.add(this.handle);
+    this.rakeHead.add(cbox(rb, 0, 0, 0, 0.9, 0.08, 0.08, '#7c858f', { metal: 0.6, rough: 0.35 }));
+    for (let i = 0; i < 10; i++) this.rakeHead.add(cbox(rb, -0.4 + i * 0.089, -0.09, 0.03, 0.035, 0.2, 0.035, '#7c858f', { metal: 0.6, rough: 0.35 }));
+    this.rakeHead.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+    this.reach.add(this.rakeHead);
+    this.reach.visible = false;
+    this.root.add(this.reach);
+    // ------------------------------------------------ dizzy stars
+    for (let i = 0; i < 4; i++) {
+      const s = ball(rb, 0, 0, 0, 0.13, 0.13, 0.13, '#ffe066', { emissive: '#ffd23a', emissiveIntensity: 0.9 });
+      this.stars.add(s);
+    }
+    this.stars.visible = false;
+    this.root.add(this.stars);
+  }
+
+  /** Back to a shiny tractor with the Farmer in the seat (a new fight). */
+  reset() {
+    if (this.wrecked) for (const m of this.tractorMats) { m.color.copy(m.userData.color); m.emissive.setRGB(0, 0, 0); }
+    this.wrecked = false;
+    this.tractor.position.set(0, 0, 0);
+    this.tractor.rotation.set(0, 0, 0);
+    if (this.tractor.parent !== this.root) this.root.add(this.tractor);
+    this.farmer.sit = 0;
+  }
+
+  /** BOOM: the tractor turns into a burnt wreck, left where it blew up. */
+  wreck(scene: THREE.Object3D) {
+    if (this.wrecked) return;
+    this.wrecked = true;
+    for (const m of this.tractorMats) {
+      m.userData.color ??= m.color.clone();
+      m.color.multiplyScalar(0.18);
+      m.emissive.setRGB(0, 0, 0);
+    }
+    this.tractor.updateWorldMatrix(true, false);
+    scene.attach(this.tractor);
+    this.tractor.rotation.z += 0.12;
+    this.tractor.position.y = -0.1;
+  }
+
+  /**
+   * Pose for a frame. `phase` 1 rides the tractor, 2 walks. `rake` is how far the rake
+   * reaches out (0 = held normally). `dizzy` spins stars over the head; `flash` 0..1 is
+   * a ketchup hit; `rev` shakes the tractor; `bite` 0..1 lunges with the mouth open.
+   */
+  pose(o: { phase: 1 | 2; walking: boolean; walkPhase: number; rake: number; rakeUp: number; dizzy: boolean; flash: number; rev: number; bite: number; smoke: number; fallen: number; time: number; dt: number }) {
+    const f = this.farmer;
+    const riding = o.phase === 1;
+    // the Farmer in the tractor seat
+    f.sit = riding ? 1 : 0;
+    f.root.position.set(0, riding ? 0.62 : 0, riding ? -0.6 : 0);
+    f.armPose = riding ? { l: -1.0, r: -1.0 } : null;
+    f.rakeUp = riding ? 0 : o.rakeUp;
+    f.lunge = Math.max(f.lunge, o.bite);
+    f.mouthOpen = o.bite > 0 ? 1 : riding ? 0.3 + Math.abs(Math.sin(o.time * 6)) * 0.3 : 0;
+    f.animate(null, o.walking && !riding, o.walkPhase, o.dt);
+    f.root.rotation.set(-o.fallen * Math.PI / 2 * 0.95, 0, 0);
+    if (o.fallen) f.root.position.y = 0.25;
+    if (f.rake) f.rake.visible = !riding && o.rake <= 0.05;
+    // the tractor bounces and rumbles; wheels turn
+    if (!this.wrecked) {
+      this.tractor.visible = riding;
+      const shake = o.rev * 0.04 + 0.01;
+      this.chassis.position.set((Math.random() - 0.5) * shake, Math.abs(Math.sin(o.walkPhase * 0.7)) * 0.03 + (Math.random() - 0.5) * shake, 0);
+      for (const w of this.wheels) w.rotation.x = o.walkPhase * 0.6;
+      const glow = o.flash > 0 ? 0.9 : o.smoke;
+      for (const m of this.tractorMats) {
+        m.userData.color ??= m.color.clone();
+        m.emissive.setRGB(glow, glow * (o.flash > 0 ? 0.05 : 0.12), 0);
+        m.emissiveIntensity = 1;
+      }
+    }
+    // a ketchup hit on foot: he squashes a little
+    const squash = o.flash > 0 && !riding ? 0.9 : 1;
+    f.body.scale.set(1.1 / squash, 1.1 * squash, 1.1 / squash);
+    // the long rake
+    this.reach.visible = !riding && o.rake > 0.05;
+    if (this.reach.visible) {
+      const L = Math.max(0.3, o.rake);
+      this.reach.position.set(0.32, 1.15, 0.2);
+      this.handle.scale.set(0.06, L, 0.06);
+      this.handle.position.z = L / 2;
+      this.rakeHead.position.set(0, 0, L);
+    }
+    // dizzy stars
+    this.stars.visible = o.dizzy;
+    if (o.dizzy) {
+      const top = riding ? 3.0 : 2.45;
+      this.stars.children.forEach((s, i) => {
+        const a = o.time * 4 + (i / 4) * Math.PI * 2;
+        s.position.set(Math.cos(a) * 0.45, top + Math.sin(a * 2) * 0.06, Math.sin(a) * 0.45 + (riding ? -0.6 : 0));
+      });
+    }
+  }
+}

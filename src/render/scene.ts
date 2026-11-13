@@ -8,7 +8,7 @@ import { buildFloor, type FloorView } from './world';
 import { buildFurniture } from './furniture';
 import { CART_REACH } from '../game/carts';
 import { SecretFx, FoodFx, SECRET_COLORS } from './secrets';
-import { NuggetModel, PersonModel, BossModel, drumstick, pinkSlip, firedStamp, faceAngle, ketchupBottle, makeFamily, type FamilyModel } from './characters';
+import { NuggetModel, PersonModel, BossModel, FarmerBossModel, drumstick, pinkSlip, firedStamp, faceAngle, ketchupBottle, makeFamily, type FamilyModel } from './characters';
 import { OfficeCutscene } from './office';
 import { Cutscene, BossCutscene, CAM_OFFSET } from './cutscene';
 import { bakeBubble, drawSymbol, makeCanvas } from './paint';
@@ -19,7 +19,7 @@ import { FarmCutscene } from './farm';
 const START = LEVEL1.start as Required<typeof LEVEL1.start>;
 import { INTRO_TIME, type Chaser, type GameEvent, type GameState } from '../game/state';
 import { castRay } from '../game/vision';
-import { SLAM_RADIUS, WAVE_BAND, WAVE_MAX, autoAim, bossDef } from '../game/boss';
+import { SLAM_RADIUS, WAVE_BAND, WAVE_MAX, BOOM_RADIUS, RAKE_WIDTH, autoAim, bossDef, bossRadius, chargeLength, rakeReach } from '../game/boss';
 import { KEY_INFO, type KeyColor } from '../game/types';
 
 export type View = 'game' | 'menu' | 'cutscene' | 'bossIntro' | 'street' | 'farm';
@@ -160,6 +160,11 @@ export class Scene {
   private foodFx = new FoodFx();
   private gus = new BossModel();
   private manager = new BossModel('manager');
+  /** Level 3: the Farmer on his tractor, then with his long rake. */
+  private farmerBoss = new FarmerBossModel();
+  /** The red lane a tractor charge or a rake swipe is about to go down. */
+  private lane: THREE.Mesh;
+  private smokeT = 0;
   private flyingSlips: THREE.Group[] = [];
   private ketchupBlobs: THREE.Mesh[] = [];
   private flyingSticks: THREE.Group[] = [];
@@ -236,6 +241,13 @@ export class Scene {
     this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.street.group, this.farm.group, this.gus.root, this.manager.root, this.officeCut.group, this.secretFx.group, this.foodFx.group);
     this.gus.root.visible = false;
     this.manager.root.visible = false;
+    this.farmerBoss.root.visible = false;
+    this.scene.add(this.farmerBoss.root);
+    this.lane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: '#ff3030', transparent: true, opacity: 0.3, depthWrite: false, toneMapped: false }));
+    this.lane.rotation.x = -Math.PI / 2;
+    this.lane.renderOrder = 3;
+    this.lane.visible = false;
+    this.scene.add(this.lane);
     for (let i = 0; i < 16; i++) {
       const sl = pinkSlip(1.3);
       sl.visible = false;
@@ -367,6 +379,7 @@ export class Scene {
     this.gus.fallen = 0;
     this.manager.fallen = 0;
     this.manager.lift = 0;
+    this.farmerBoss.reset();
     for (const m of this.stampMarks) m.age = 99;
     this.bossCut.reset();
     this.officeCut.reset();
@@ -541,6 +554,41 @@ export class Scene {
         this.shake = 0.25;
         for (let i = 0; i < 20; i++) this.particles.emit(p.x, 0.3, p.y, { vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 3, vz: (Math.random() - 0.5) * 3, grav: 9, life: 0.9, size: 0.05, color: '#d99a3a' });
         break;
+      case 'crash':
+        // the tractor smashes into the fence
+        this.shake = 0.35;
+        for (let i = 0; i < 26; i++) this.particles.emit(e.x + (Math.random() - 0.5) * 1.5, 0.3, e.y + (Math.random() - 0.5) * 1.5, { vx: (Math.random() - 0.5) * 5, vy: 1 + Math.random() * 3, vz: (Math.random() - 0.5) * 5, grav: 8, life: 0.8, size: 0.1, color: i % 3 ? '#a5825a' : '#c9b48a' });
+        break;
+      case 'rev':
+        if (state.boss) for (let i = 0; i < 8; i++) this.particles.emit(state.boss.pos.x, 1.6, state.boss.pos.y, { vy: 1.5, vx: (Math.random() - 0.5), vz: (Math.random() - 0.5), life: 0.9, size: 0.14, color: '#555a60' });
+        break;
+      case 'tractorSmoke':
+        this.shake = 0.2;
+        break;
+      case 'tractorBoom': {
+        // KA-BOOM: fire, smoke, flying bits, and the tractor is a burnt wreck
+        this.shake = 0.8;
+        this.burst(e.x, 1, e.y, '#ff8a1a', 50);
+        for (let i = 0; i < 70; i++) {
+          const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 7;
+          this.particles.emit(e.x, 0.6 + Math.random(), e.y, { vx: Math.cos(a) * sp, vy: 2 + Math.random() * 6, vz: Math.sin(a) * sp, grav: 7, life: 0.8 + Math.random() * 0.8, size: 0.1 + Math.random() * 0.18, color: ['#ff5a1a', '#ffd23a', '#3a3a3a', '#7a7a7a', '#3f8f4a'][i % 5] });
+        }
+        this.farmerBoss.wreck(this.scene);
+        break;
+      }
+      case 'hooked':
+        this.shake = 0.2;
+        break;
+      case 'wriggleFree':
+        for (let i = 0; i < 12; i++) this.particles.emit(p.x, 0.3, p.y, { vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 2, vz: (Math.random() - 0.5) * 3, grav: 6, life: 0.6, size: 0.06, color: '#ffe066' });
+        break;
+      case 'dodgeRake':
+        for (let i = 0; i < 10; i++) this.particles.emit(p.x, 0.3, p.y, { vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 2, vz: (Math.random() - 0.5) * 3, grav: 6, life: 0.6, size: 0.06, color: '#ffe066' });
+        break;
+      case 'bite':
+        this.shake = 0.3;
+        for (let i = 0; i < 24; i++) this.particles.emit(p.x, 0.5, p.y, { vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 3, vz: (Math.random() - 0.5) * 3, grav: 9, life: 0.9, size: 0.06, color: '#d99a3a' });
+        break;
       case 'bossDown': {
         const b = state.boss!;
         this.shake = 0.3;
@@ -583,6 +631,8 @@ export class Scene {
     this.nugget.root.visible = !story;
     this.gus.root.visible = !story && !!state.boss && p.floor === 0 && state.level.id === 1;
     this.manager.root.visible = !story && !!state.boss && state.level.id === 2;
+    this.farmerBoss.root.visible = !story && !!state.boss && state.level.id === 3;
+    this.farmerBoss.tractor.visible &&= !story && !!state.boss && state.level.id === 3;
     // the security monitors live on the Manager's desk; the full-screen footage only in the cutscene
     this.officeCut.group.visible = !story && state.level.id === 2;
     if (!bossIntro) this.officeCut.hideTape();
@@ -837,11 +887,75 @@ export class Scene {
     for (; ki < this.ketchupBlobs.length; ki++) this.ketchupBlobs[ki].visible = false;
     for (; di < this.flyingSticks.length; di++) this.flyingSticks[di].visible = false;
     for (; si < this.flyingSlips.length; si++) this.flyingSlips[si].visible = false;
+    if (fighting && state.level.id === 3) this.renderFarmerBoss(state, dt);
+    else {
+      this.lane.visible = false;
+      if (!fighting) this.farmerBoss.tractor.visible = false;
+    }
     for (const m of this.stampMarks) {
       m.age += dt;
       m.mesh.visible = fighting && m.age < 4;
       (m.mesh.material as THREE.MeshBasicMaterial).opacity = Math.min(1, (4 - m.age) / 1.5);
     }
+  }
+
+  /** Level 3: the Farmer on his tractor or with his rake, the red lanes, the explosion ring. */
+  private renderFarmerBoss(state: GameState, dt: number) {
+    const b = state.boss!;
+    const fb = this.farmerBoss;
+    const p = state.player;
+    fb.root.position.set(b.pos.x, 0, b.pos.y);
+    fb.root.rotation.y = faceAngle(b.facing);
+    const down = b.mode === 'defeated' || (state.status === 'won' && b.hp <= 0);
+    fb.pose({
+      phase: b.phase,
+      walking: b.mode === 'walk',
+      walkPhase: b.walkPhase,
+      rake: b.mode === 'rake' || b.mode === 'pull' ? b.rake : 0,
+      rakeUp: b.mode === 'rakeWindup' ? 1 : 0,
+      dizzy: b.mode === 'stunned' || down,
+      flash: b.flash,
+      rev: b.mode === 'chargeWindup' || b.mode === 'explode' ? 1 : b.mode === 'charge' ? 0.6 : 0.15,
+      bite: b.mode === 'bite' ? 1 : 0,
+      smoke: b.mode === 'explode' ? 0.25 + Math.abs(Math.sin(this.time * 14)) * 0.35 : 0,
+      fallen: down ? 1 : 0,
+      time: this.time,
+      dt,
+    });
+    // smoke: from the exhaust while he drives, pouring out of the wreck when it's about to blow, and after
+    this.smokeT -= dt;
+    const wreck = b.phase === 2;
+    if (this.smokeT <= 0 && (b.phase === 1 || wreck)) {
+      this.smokeT = b.mode === 'explode' ? 0.03 : wreck ? 0.12 : 0.2;
+      const t = fb.tractor;
+      const at = wreck ? t.position : new THREE.Vector3(b.pos.x, 0, b.pos.y);
+      this.particles.emit(at.x + (Math.random() - 0.5) * 0.6, 1.4, at.z + (Math.random() - 0.5) * 0.6, { vy: 1.2 + Math.random(), vx: (Math.random() - 0.5) * 0.6, vz: (Math.random() - 0.5) * 0.6, grav: -0.3, life: 1.2, size: b.mode === 'explode' ? 0.22 : 0.14, color: b.mode === 'explode' && Math.random() < 0.3 ? '#ff7a1a' : '#4a4d52' });
+    }
+    // the red lane: where the tractor is about to charge, or where the rake will reach
+    const A = bossDef(state).arena;
+    const R = bossRadius(state);
+    let lane: { len: number; w: number; from: number } | null = null;
+    if (b.mode === 'chargeWindup') lane = { len: chargeLength(A, b.pos, b.dir), w: R * 2, from: 0 };
+    else if (b.mode === 'rakeWindup') lane = { len: rakeReach(b), w: RAKE_WIDTH * 2 + 0.25, from: R };
+    this.lane.visible = !!lane;
+    if (lane) {
+      const len = Math.max(0.5, lane.len - lane.from);
+      const mid = lane.from + len / 2;
+      this.lane.position.set(b.pos.x + Math.cos(b.dir) * mid, 0.05, b.pos.y + Math.sin(b.dir) * mid);
+      this.lane.rotation.set(-Math.PI / 2, 0, -b.dir);
+      this.lane.scale.set(len, lane.w, 1);
+      (this.lane.material as THREE.MeshBasicMaterial).opacity = 0.22 + Math.abs(Math.sin(this.time * 14)) * 0.22;
+    }
+    // the ring the explosion will fill
+    if (b.mode === 'explode') {
+      this.slamRing.visible = true;
+      this.slamRing.position.set(b.pos.x, 0.05, b.pos.y);
+      const s = (BOOM_RADIUS / SLAM_RADIUS) * (1 + Math.sin(this.time * 18) * 0.04);
+      this.slamRing.scale.set(s, s, 1);
+    } else this.slamRing.scale.set(1, 1, 1);
+    // the nugget squirms on the end of the rake
+    if (b.mode === 'pull' || b.mode === 'bite') this.nugget.inner.position.x = Math.sin(this.time * 50) * 0.04;
+    void p;
   }
 
   private renderGame(state: GameState, dt: number, fv: FloorView) {
@@ -885,9 +999,9 @@ export class Scene {
     if (won) p.walkPhase += dt * 14;
     const fighting = state.status === 'boss';
     n.bottleOut = afterBoss ? 1 : 0;
-    if (fighting && state.boss!.mode === 'jump') n.mood = 'scared';
+    if (fighting && ['jump', 'charge', 'pull', 'bite', 'explode'].includes(state.boss!.mode)) n.mood = 'scared';
     n.animate(won ? Math.PI / 2 : hopForJoy && state.status === 'won' ? Math.PI / 2 : p.facing, (p.moving && (state.status === 'playing' || fighting)) || won, p.walkPhase, dt, p.dashTime > 0);
-    if (fighting && state.boss!.mode === 'jump') n.mood = 'scared';
+    if (fighting && ['jump', 'charge', 'pull', 'bite', 'explode'].includes(state.boss!.mode)) n.mood = 'scared';
     n.opacity = p.hidden ? 0.5 : 1;
     n.root.visible = !(p.invuln > 0 && (state.status === 'playing' || fighting) && Math.floor(this.time * 12) % 2);
     if (state.status === 'caught') {
@@ -916,7 +1030,8 @@ export class Scene {
     for (const c of state.chasers) {
       const cv = this.chasers.get(c.def.id)!;
       // in the Manager boss fight the staff are left out on the shop floor
-      const here = c.floor === p.floor && !(state.boss && state.level.id === 2);
+      // and on the farm the Farmer himself is the boss now
+      const here = c.floor === p.floor && !(state.boss && state.level.id === 2) && !(state.boss && state.level.id === 3 && c.def.id === 'farmer');
       cv.model.root.visible = here;
       cv.cone.visible = here;
       cv.bubble.visible = false;
@@ -973,7 +1088,7 @@ export class Scene {
     this.camera.lookAt(this.camTarget.clone().add(jitter));
     cutUniforms.uPlayer.value.set(nx, 0, nz);
 
-    if (fighting && (state.boss!.mode === 'slamWindup' || state.boss!.mode === 'jump')) danger = 1;
+    if (fighting && ['slamWindup', 'jump', 'chargeWindup', 'charge', 'explode', 'rakeWindup', 'pull', 'bite'].includes(state.boss!.mode)) danger = 1;
     this.setDanger(danger, dt);
   }
 
