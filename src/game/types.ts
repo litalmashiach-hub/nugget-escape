@@ -46,10 +46,10 @@ export type FurnitureKind =
   | 'shelf' | 'freezer' | 'produce' | 'checkout' | 'deli' | 'cart' | 'rack' | 'pallet' | 'bakery' | 'officeDesk' | 'trophyCase'
   // farm (Level 3)
   | 'hay' | 'haystack' | 'trough' | 'coop' | 'hen' | 'tractor' | 'corn' | 'cow' | 'pigsty' | 'well' | 'scarecrow'
-  | 'pumpkins' | 'workbench' | 'barrel' | 'wheelbarrow' | 'milkCans' | 'woodpile';
+  | 'pumpkins' | 'workbench' | 'barrel' | 'wheelbarrow' | 'milkCans' | 'woodpile' | 'appleTree';
 
-/** Furniture tall enough to block sight (store shelves and racks, rows of corn, haystacks). */
-export const TALL_FURNITURE: ReadonlySet<FurnitureKind> = new Set<FurnitureKind>(['shelf', 'rack', 'corn', 'haystack']);
+/** Furniture tall enough to block sight (store shelves and racks, rows of corn, haystacks, apple trees). */
+export const TALL_FURNITURE: ReadonlySet<FurnitureKind> = new Set<FurnitureKind>(['shelf', 'rack', 'corn', 'haystack', 'appleTree']);
 
 /**
  * solid: blocks everyone.

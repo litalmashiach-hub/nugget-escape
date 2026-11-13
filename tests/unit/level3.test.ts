@@ -35,10 +35,10 @@ function withOne(id: string) {
 }
 
 describe('level 3: the farm', () => {
-  it('is a farmyard with a chicken pen, a cornfield, a barn, a tool shed and the country road', () => {
+  it('is a farmyard with a chicken pen, a cornfield, a barn, a tool shed, an orchard, a garden, a pumpkin patch and the country road', () => {
     expect(LEVELS[3]).toBe(LEVEL3);
     const [m] = buildMaps(FARM);
-    expect(m.def.rooms.map((r) => r.name)).toEqual(['Chicken Pen', 'Cornfield', 'Big Red Barn', 'Tool Shed', 'Country Road', 'Farmyard']);
+    expect(m.def.rooms.map((r) => r.name)).toEqual(['Chicken Pen', 'Cornfield', 'Big Red Barn', 'Tool Shed', 'Apple Orchard', 'Vegetable Garden', 'Pumpkin Patch', 'Country Road', 'Farmyard']);
     for (const k of m.def.keys) expect(m.walkableForPlayer(k.x, k.y, new Set()), `${k.color} key`).toBe(true);
     const all = new Set(LEVEL3.keyOrder);
     for (const f of m.def.family)
@@ -46,19 +46,19 @@ describe('level 3: the farm', () => {
         expect(m.walkableForFamily(x, y, all), `${f.name} at ${x},${y}`).toBe(true);
   });
 
-  it('can be solved: red (pen) -> orange (yard) -> teal (cornfield) -> green (barn) -> gold (shed) -> the road', () => {
+  it('can be solved with eight keys: red (pen) -> orange (yard) -> teal (cornfield) -> green (barn) -> purple (shed) -> blue (orchard) -> pink (garden) -> gold (pumpkin patch) -> the road', () => {
     const r = solveHouse(FARM, LEVEL3.start);
     expect(r.escaped).toBe(true);
-    expect(r.order).toEqual(['red', 'orange', 'teal', 'green', 'gold']);
+    expect(r.order).toEqual(['red', 'orange', 'teal', 'green', 'purple', 'blue', 'pink', 'gold']);
   });
 
-  it('starts locked in the chicken pen with five keys to find, chased by the farmer, his dog and the farmhand', () => {
+  it('starts locked in the chicken pen with eight keys to find, chased by the farmer, two dogs and the farmhand', () => {
     const s = createGame('normal', { level: 3 });
     expect(s.level.id).toBe(3);
     expect(s.status).toBe('intro');
     expect(s.maps[0].roomAt(s.player.pos.x, s.player.pos.y)?.id).toBe('pen');
-    expect(s.keys.map((k) => k.color)).toEqual(['red', 'orange', 'teal', 'green', 'gold']);
-    expect(s.chasers.map((c) => c.def.kind)).toEqual(['farmer', 'dog', 'farmhand']);
+    expect(s.keys.map((k) => k.color)).toEqual(['red', 'orange', 'teal', 'green', 'purple', 'blue', 'pink', 'gold']);
+    expect(s.chasers.map((c) => c.def.kind)).toEqual(['farmer', 'dog', 'farmhand', 'dog']);
     expect(currentObjective(s)?.text).toBe('Find the Red key');
     expect(currentObjective(s)?.hint).toContain('Chicken Pen');
     // no boss on the farm, no easter eggs either
@@ -128,11 +128,28 @@ describe('level 3: the farm', () => {
     expect(canSee(m, all, { pos: { x: 12, y: 16 }, facing: 0, range: 8, fov: Math.PI }, { x: 17.5, y: 16 })).toBe(false);
   });
 
+  it('each new gate opens with its key: purple orchard, blue garden, pink pumpkin patch', () => {
+    const s = createGame('normal', { level: 3, noFamily: true, seed: 1 });
+    skipIntro(s);
+    const m = s.maps[0];
+    for (const [color, room, x, y, dx, dy] of [
+      ['purple', 'orchard', 8.5, 27.4, 0, 1],
+      ['blue', 'garden', 39.5, 10.6, 0, -1],
+      ['pink', 'patch', 25.5, 33.6, 0, -1],
+    ] as const) {
+      s.held.add(color);
+      s.player.pos = { x, y };
+      const ev = run(s, 1.5, () => ({ mx: dx, my: dy, dash: false }));
+      expect(ev, color).toContain('unlock');
+      expect(m.roomAt(s.player.pos.x, s.player.pos.y)?.id, color).toBe(room);
+    }
+  });
+
   it('the gold gate leads out to the country road, and stepping onto it wins (no boss)', () => {
     const s = createGame('normal', { level: 3, noFamily: true, seed: 1 });
     skipIntro(s);
     for (const c of LEVEL3.keyOrder) s.held.add(c);
-    for (const c of ['red', 'orange', 'teal', 'green'] as const) s.unlocked.add(c);
+    for (const c of ['red', 'orange', 'teal', 'green', 'purple', 'blue', 'pink'] as const) s.unlocked.add(c);
     expect(currentObjective(s)?.text).toBe('Open the Gold farm gate!');
     s.player.pos = { x: 28, y: 35.5 };
     const ev = run(s, 3, () => ({ mx: 0, my: 1, dash: false }));
@@ -148,7 +165,7 @@ describe('level 3: the farm', () => {
       const s = createGame(d, { level: 3, noFamily: true, seed: 3 });
       run(s, 240, botInput);
       expect(s.status, d).toBe('won');
-      expect(s.held.size).toBe(5);
+      expect(s.held.size).toBe(8);
     }
   });
 
