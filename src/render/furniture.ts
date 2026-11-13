@@ -763,6 +763,21 @@ export function buildFurniture(it: Furniture): FurnitureBuild {
         }
       break;
     }
+    case 'appleTree': {
+      // a round leafy apple tree, dotted with red apples (a few have fallen)
+      const R = rng(seed);
+      const s2 = Math.min(w, h);
+      cyl(b, w / 2, 0, h / 2, 0.12 * s2 + 0.05, 1.3, '#6b4a2a');
+      ball(b, w / 2, 1.9, h / 2, 1.5 * s2, 1.2 * s2, 1.5 * s2, '#3f8f4a');
+      ball(b, w / 2 + 0.25 * s2, 2.3, h / 2 - 0.2 * s2, 1.0 * s2, 0.9 * s2, 1.0 * s2, '#4f9d55');
+      for (let i = 0; i < 9 * s2; i++) {
+        const a = R() * Math.PI * 2, y = 1.5 + R() * 0.9;
+        ball(b, w / 2 + Math.cos(a) * 0.68 * s2, y, h / 2 + Math.sin(a) * 0.68 * s2, 0.14, 0.14, 0.14, '#d62828');
+      }
+      for (let i = 0; i < 3; i++) ball(b, 0.2 + R() * (w - 0.4), 0.07, 0.2 + R() * (h - 0.4), 0.14, 0.14, 0.14, '#d62828');
+      b.top = 2.6;
+      break;
+    }
     default:
       box(b, 0.05, 0, 0.05, w - 0.1, 0.8, h - 0.1, WOOD);
   }

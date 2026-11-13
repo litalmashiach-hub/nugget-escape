@@ -493,8 +493,9 @@ export const STORE: FloorDef[] = [
 
 /**
  * Clover Hill Farm, on a sunny morning. The farmer has locked the nugget in the chicken pen.
- * Key chain: red (in the pen) -> pen gate -> orange (far corner of the farmyard) -> Cornfield
- *   -> teal -> Big Red Barn -> green -> Tool Shed -> gold -> the farm gate and the country road (the goal).
+ * Key chain: red (in the pen) -> pen gate -> orange (farmyard, by the pigsty) -> Cornfield -> teal
+ *   -> Big Red Barn -> green -> Tool Shed -> purple -> Apple Orchard -> blue -> Vegetable Garden
+ *   -> pink -> Pumpkin Patch -> gold -> the farm gate and the country road (the goal).
  * Rows of corn and haystacks are tall: nobody can see through them.
  * Sticky mud puddles slow the nugget right down.
  */
@@ -504,15 +505,15 @@ export const FARM: FloorDef[] = [
     name: 'Clover Hill Farm',
     rows: [
       '########################################################',
-      '#..................#.......................#...........#',
-      '#..................#.......................#...........#',
-      '#..................#...############........#...........#',
-      '#..................#...#..........#........#...........#',
-      '#..................#...#..........#........#...........#',
-      '#..................#...#..........#........#...........#',
-      '#..................#...#..........#........#...........#',
-      '#..................#...#..........#........#...........#',
-      '#..................#...#..........#........#####g#######',
+      '#..................#...............#.......#...........#',
+      '#..................#...............#.......#...........#',
+      '#..................#...#############.......#...........#',
+      '#..................#...#..........##.......#...........#',
+      '#..................#...#..........##.......#...........#',
+      '#..................#...#..........##.......#...........#',
+      '#..................#...#..........##.......#...........#',
+      '#..................#...#..........##.......#...........#',
+      '#..................#...#..........#####b########g#######',
       '#..................#...#..........#....................#',
       '#..................#...#####r######....................#',
       '#..................#...................................#',
@@ -528,18 +529,18 @@ export const FARM: FloorDef[] = [
       '#..................................#...................#',
       '#..................................#...................#',
       '#..................................#...................#',
-      '#..................................#...................#',
-      '#..................................#...................#',
-      '#..................................#...................#',
-      '#..................................o...................#',
-      '#..................................#...................#',
-      '#..................................#...................#',
-      '#..................................#...................#',
-      '#..................................#...................#',
-      '#..................................#...................#',
-      '#..................................#...................#',
-      '#..................................#...................#',
-      '#..................................#...................#',
+      '#...................###########....#...................#',
+      '#...................#.........#....#...................#',
+      '#...................#.........#....#...................#',
+      '########p########...#.........#....o...................#',
+      '#...............#...#.........#....#...................#',
+      '#...............#...#.........#....#...................#',
+      '#...............#...#.........#....#...................#',
+      '#...............#...#####k#####....#...................#',
+      '#...............#..................#...................#',
+      '#...............#..................#...................#',
+      '#...............#..................#...................#',
+      '#...............#..................#...................#',
       '###########################ff###########################',
       '#......................................................#',
       '########################################################',
@@ -549,6 +550,9 @@ export const FARM: FloorDef[] = [
       { id: 'corn', name: 'Cornfield', seed: [44, 29], style: 'dirt', wall: '#c8a26b', door: 'orange', outdoor: true },
       { id: 'barn', name: 'Big Red Barn', seed: [9, 6], style: 'barn', wall: '#f1dcc0', door: 'teal' },
       { id: 'shed', name: 'Tool Shed', seed: [49, 4], style: 'concrete', wall: '#cbd5dc', door: 'green' },
+      { id: 'orchard', name: 'Apple Orchard', seed: [8, 32], style: 'grass', wall: '#c8a26b', door: 'purple', outdoor: true },
+      { id: 'garden', name: 'Vegetable Garden', seed: [39, 5], style: 'dirt', wall: '#c8a26b', door: 'blue', outdoor: true },
+      { id: 'patch', name: 'Pumpkin Patch', seed: [25, 29], style: 'straw', wall: '#c8a26b', door: 'pink', outdoor: true },
       { id: 'road', name: 'Country Road', seed: [10, 38], style: 'road', wall: '#c8a26b', door: 'gold', outdoor: true },
       { id: 'yard', name: 'Farmyard', seed: [12, 25], style: 'grass', wall: '#b5402f', outdoor: true },
     ],
@@ -591,11 +595,26 @@ export const FARM: FloorDef[] = [
       f('hay', 17, 32, 2, 1, 'hide'),
       f('hay', 39, 13, 2, 1, 'hide'),
       f('hay', 24, 24, 1, 1, 'hide'),
-      f('well', 20, 27, 2, 2, 'solid'),
+      f('well', 16, 26, 2, 2, 'solid'),
       f('trough', 12, 26, 3, 1, 'solid'),
-      f('scarecrow', 28, 30, 1, 1, 'solid'),
-      f('pumpkins', 11, 34, 3, 2, 'solid'),
+      // Apple Orchard (behind the purple gate): apple trees, with a puppy keeping watch
+      f('appleTree', 3, 30, 2, 2, 'solid'),
+      f('appleTree', 10, 30, 2, 2, 'solid'),
+      f('appleTree', 11, 34, 2, 2, 'solid'),
+      f('appleTree', 6, 32, 1, 1, 'solid'),
+      f('hay', 14, 29, 1, 1, 'hide'),
+      f('wheelbarrow', 8, 35, 1, 1, 'hide'),
+      // Vegetable Garden (behind the blue gate)
       f('woodpile', 37, 1, 4, 1, 'solid'),
+      f('pumpkins', 36, 4, 2, 2, 'solid'),
+      f('scarecrow', 40, 3, 1, 1, 'solid'),
+      f('corn', 39, 5, 1, 3, 'solid'),
+      f('hay', 36, 8, 1, 1, 'hide'),
+      // Pumpkin Patch (behind the pink gate), where the gold key is
+      f('pumpkins', 22, 27, 3, 2, 'solid'),
+      f('pumpkins', 26, 26, 2, 2, 'solid'),
+      f('scarecrow', 25, 29, 1, 1, 'solid'),
+      f('hay', 22, 30, 1, 1, 'hide'),
       f('wheelbarrow', 33, 18, 1, 1, 'hide'),
       f('cow', 46, 14, 2, 1, 'solid'),
       f('milkCans', 13, 14, 1, 1, 'solid'),
@@ -613,10 +632,13 @@ export const FARM: FloorDef[] = [
     ],
     keys: [
       { color: 'red', x: 32, y: 5 },
-      { color: 'orange', x: 3, y: 35 },
+      { color: 'orange', x: 2, y: 25 },
       { color: 'teal', x: 53, y: 35 },
       { color: 'green', x: 17, y: 3 },
-      { color: 'gold', x: 53, y: 3 },
+      { color: 'purple', x: 53, y: 3 },
+      { color: 'blue', x: 2, y: 35 },
+      { color: 'pink', x: 42, y: 7 },
+      { color: 'gold', x: 28, y: 30 },
     ],
     mud: [
       [2, 33, 4, 1],
@@ -625,13 +647,14 @@ export const FARM: FloorDef[] = [
       [26, 18, 2, 1],
       [40, 18, 3, 1],
       [23, 35, 2, 1],
+      [26, 30, 2, 1],
       [43, 32, 2, 1],
       [51, 33, 2, 1],
     ],
     family: [
       {
         id: 'farmer', name: 'The Farmer', kind: 'farmer', start: [16, 19],
-        waypoints: [[16, 19], [28, 15], [40, 16], [50, 13], [39, 5], [30, 22], [18, 30], [8, 25], [26, 34], [32, 26]],
+        waypoints: [[16, 19], [28, 15], [40, 16], [50, 13], [39, 11], [30, 22], [18, 30], [8, 25], [26, 34], [32, 26]],
         patrolSpeed: 2.1, chaseSpeed: 3.9, visionRange: 7, fovDeg: 85, giveUp: 3.5, reach: 0.45,
       },
       {
@@ -643,6 +666,11 @@ export const FARM: FloorDef[] = [
         id: 'hank', name: 'Hank the farmhand', kind: 'farmhand', start: [9, 4],
         waypoints: [[3, 5], [9, 3], [15, 5], [13, 9], [6, 9], [9, 11]],
         patrolSpeed: 1.7, chaseSpeed: 3.6, visionRange: 5.5, fovDeg: 85, giveUp: 3,
+      },
+      {
+        id: 'pip', name: 'Pip the puppy', kind: 'dog', start: [8, 32],
+        waypoints: [[6, 30], [13, 32], [9, 36], [2, 29], [14, 36], [8, 29]],
+        patrolSpeed: 2.2, chaseSpeed: 4.2, visionRange: 3, fovDeg: 360, giveUp: 1.6,
       },
     ],
     lights: [],
@@ -695,7 +723,7 @@ export const LEVEL2: LevelDef = {
 export const LEVEL3: LevelDef = {
   id: 3, name: 'The Farm', floors: FARM,
   start: { floor: 0, x: 27.5, y: 7.5 },
-  keyOrder: ['red', 'orange', 'teal', 'green', 'gold'],
+  keyOrder: ['red', 'orange', 'teal', 'green', 'purple', 'blue', 'pink', 'gold'],
   goal: 'road',
   // caught: the farmer puts the nugget back in the chicken pen
   shelf: { floor: 0, x: 28.5, y: 6.5 }, caughtTo: 'back in the pen',

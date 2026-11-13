@@ -367,7 +367,7 @@ test('Level 3 opens with the bus ride to the farm, where the farmer locks the nu
   await page.evaluate(() => (window as any).__nugget.seekCutscene(30.9));
   await expect.poll(() => page.evaluate(() => (window as any).__nugget.mode), { timeout: 5000 }).toBe('game');
   await expect(page.locator('#hud')).toBeVisible();
-  await expect(page.locator('.key-slot')).toHaveCount(5);
+  await expect(page.locator('.key-slot')).toHaveCount(8);
   await expect(page.locator('#hud-floor')).toHaveText('Clover Hill Farm');
   await expect(page.locator('#hud-objective .obj-text')).toHaveText('Find the Red key');
   await expect(page.locator('.toast').filter({ hasText: 'Locked in the chicken pen' })).toBeVisible();
@@ -410,7 +410,7 @@ test('the robot player escapes the farm through the gold gate', async ({ page })
   await expect.poll(async () => (await snap(page)).status, { timeout: 90_000, intervals: [250] }).toBe('won');
   await expect(page.locator('#screen-win')).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('#win-title')).toHaveText('You escaped the farm!');
-  await expect(page.locator('.key-slot.used')).toHaveCount(5);
+  await expect(page.locator('.key-slot.used')).toHaveCount(8);
   await expect(page.locator('#btn-next')).toBeHidden();
   await expect(page.locator('#win-next-note')).toBeHidden();
   expect(errors).toEqual([]);
