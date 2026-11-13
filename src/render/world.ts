@@ -7,7 +7,7 @@ import { buildFurniture } from './furniture';
 import { drawSymbol, makeCanvas, rng, shade } from './paint';
 import type { FloorMap } from '../game/map';
 import { KEY_INFO, type FloorStyle, type KeyColor } from '../game/types';
-import { ARENA } from '../game/boss';
+import { ARENA, ROAD_ARENA } from '../game/boss';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export const WALL_H = 2.3;
@@ -355,6 +355,8 @@ export function buildFloor(map: FloorMap, outsideKind: OutsideKind = 'garden'): 
     if (house && id === 0 && x > ARENA.x0 - 1 && x < ARENA.x1 + 1 && z > map.h - 0.5 && z < ARENA.y1 + 1) continue;
     // the farm: keep the road in front and the farmhouse behind clear
     if (farm && (z > map.h - 1 && z < map.h + 4 || (z < 0 && x > map.w - 18 && x < map.w + 2))) continue;
+    // ...and the field across the road, where the Farmer boss fight happens
+    if (farm && x > ROAD_ARENA.x0 - 1.5 && x < ROAD_ARENA.x1 + 1.5 && z > map.h - 1 && z < ROAD_ARENA.y1 + 1.5) continue;
     const s = 0.8 + R() * 0.8;
     cyl(yard, x, 0, z, 0.12 * s, 1.0 * s, '#6b4a2a');
     cone(yard, x, 0.8 * s, z, 0.9 * s, 1.6 * s, shade('#2f6b3a', (R() - 0.5) * 0.3));
@@ -523,14 +525,14 @@ function buildFences(map: FloorMap, isFence: (x: number, y: number) => boolean) 
 /** Around the farm: the farmhouse behind, fields and a duck pond to the sides, the country road in front. */
 function farmland(yard: ReturnType<typeof builder>, map: FloorMap, R: () => number) {
   const W = map.w, H = map.h;
-  // the country road along the front, with a bus stop by the gate
+  // the country road along the front, with a bus stop down the road
   box(yard, -14, -0.01, H + 0.2, W + 28, 0.02, 2.6, '#7b7166', { rough: 1 });
   for (let x = -12; x < W + 12; x += 3) box(yard, x, 0.012, H + 1.45, 1.4, 0.005, 0.12, '#f4f1e8');
-  const gate = map.doors.find((d) => d.color === 'gold');
-  const gx = gate ? gate.x : W / 2;
-  cyl(yard, gx + 4, 0, H + 0.6, 0.05, 2.2, '#555');
+  // (off to the side, out of the way of the Farmer's tractor)
+  const sx = ROAD_ARENA.x0 - 2;
+  cyl(yard, sx, 0, H + 0.6, 0.05, 2.2, '#555');
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.4), new THREE.MeshBasicMaterial({ map: labelTexture('BUS STOP', '#f5c518'), transparent: true }));
-  sign.position.set(gx + 4, 2.2, H + 0.66);
+  sign.position.set(sx, 2.2, H + 0.66);
   yard.group.add(sign);
   // the farmhouse behind the barn and shed: white walls, red roof, a porch
   const fx = W - 16, fz = -9;
@@ -550,6 +552,24 @@ function farmland(yard: ReturnType<typeof builder>, map: FloorMap, R: () => numb
       box(yard, x0, 0, z0 + r * 1.6, 10, 0.05, 0.9, '#6e4f30', { rough: 1 });
       for (let i = 0; i < 12; i++) ball(yard, x0 + 0.4 + i * 0.8, 0.22, z0 + r * 1.6 + 0.45, 0.4, 0.35, 0.4, shade('#58a05a', (R() - 0.5) * 0.3));
     }
+  // the field across the road, where the Farmer comes after the nugget on his tractor:
+  // a wooden rail fence round the sides and the back, mown grass and a few tyre tracks
+  const A = ROAD_ARENA;
+  const rail = (x0: number, z0: number, x1: number, z1: number) => {
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    for (let t = 0; t <= len + 0.01; t += 1.5) {
+      const k = len ? t / len : 0;
+      box(yard, x0 + (x1 - x0) * k - 0.06, 0, z0 + (z1 - z0) * k - 0.06, 0.12, 0.9, 0.12, '#8a6a45');
+    }
+    for (const h of [0.35, 0.7]) {
+      const m = box(yard, Math.min(x0, x1) - 0.03, h, Math.min(z0, z1) - 0.03, Math.abs(x1 - x0) + 0.06, 0.08, Math.abs(z1 - z0) + 0.06, '#a5825a');
+      m.castShadow = true;
+    }
+  };
+  rail(A.x0 - 0.15, H + 3, A.x0 - 0.15, A.y1 + 0.15);
+  rail(A.x1 + 0.15, H + 3, A.x1 + 0.15, A.y1 + 0.15);
+  rail(A.x0 - 0.15, A.y1 + 0.15, A.x1 + 0.15, A.y1 + 0.15);
+  for (let i = 0; i < 5; i++) box(yard, A.x0 + 3 + i * 5.5, 0.005, H + 4 + (i % 2) * 3, 4, 0.01, 0.35, '#6e5a3c', { rough: 1 });
   // a duck pond
   ball(yard, -7, -0.02, 28, 7, 0.1, 5, '#5fb7e8', { rough: 0.05, metal: 0.2 });
   for (const [x, z] of [[-8, 27.5], [-6, 29]]) {

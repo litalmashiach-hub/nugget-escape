@@ -404,12 +404,38 @@ test('Level 3: mud slows the nugget down', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('the robot player escapes the farm through the gold gate', async ({ page }) => {
-  test.setTimeout(120_000);
+test('Level 3: out on the country road the Farmer comes after the nugget on his tractor, then with his rake', async ({ page }) => {
+  const errors = await open(page, '?level=3&autostart&nofamily&seed=1');
+  await page.waitForFunction(() => (window as any).__nugget.state.status === 'playing');
+  await page.evaluate(() => (window as any).__nugget.toRoad());
+  // no cutscene: he roars up the road on the tractor
+  await expect(page.locator('#boss-hud')).toBeVisible();
+  await expect(page.locator('#boss-hud .boss-name')).toHaveText('The Farmer');
+  await expect(page.locator('#hud-objective .obj-text')).toHaveText('Squirt ketchup at the tractor!');
+  await expect(page.locator('.toast').filter({ hasText: 'Not so fast, chicken!' })).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__nugget.state.boss.mode)).toBe('arrive');
+  // wreck the tractor: BOOM, and the Farmer grabs his rake
+  await page.evaluate(() => { const b = (window as any).__nugget.state.boss; b.mode = 'explode'; b.timer = 0.3; });
+  await expect(page.locator('.toast').filter({ hasText: 'grabs his rake' })).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#hud-objective .obj-text')).toHaveText('Squirt ketchup at the Farmer!');
+  // hooked on the rake and reeled in: CHOMP, the end of the level
+  await page.evaluate(() => {
+    const s = (window as any).__nugget.state;
+    s.player.pos = { x: s.boss.pos.x + 2, y: s.boss.pos.y };
+    s.boss.mode = 'pull'; s.boss.wiggles = 0; s.boss.timer = 99;
+  });
+  await expect(page.locator('#screen-over')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#over-text')).toContainText('CHOMP');
+  expect(await page.evaluate(() => (window as any).__nugget.state.lives)).toBe(3);
+  expect(errors).toEqual([]);
+});
+
+test('the robot player escapes the farm through the gold gate and beats the Farmer', async ({ page }) => {
+  test.setTimeout(150_000);
   const errors = await open(page, '?level=3&autostart&nofamily&bot&speed=12&seed=1');
-  await expect.poll(async () => (await snap(page)).status, { timeout: 90_000, intervals: [250] }).toBe('won');
+  await expect.poll(async () => (await snap(page)).status, { timeout: 120_000, intervals: [250] }).toBe('won');
   await expect(page.locator('#screen-win')).toBeVisible({ timeout: 10_000 });
-  await expect(page.locator('#win-title')).toHaveText('You escaped the farm!');
+  await expect(page.locator('#win-title')).toHaveText('You beat the Farmer!');
   await expect(page.locator('.key-slot.used')).toHaveCount(8);
   await expect(page.locator('#btn-next')).toBeHidden();
   await expect(page.locator('#win-next-note')).toBeHidden();

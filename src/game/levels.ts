@@ -687,7 +687,7 @@ export interface LevelDef {
   start: { floor: number; x: number; y: number; plate?: { x: number; y: number } };
   /** Keys in the order the player needs them. The last one is gold. */
   keyOrder: KeyColor[];
-  /** 'frontDoor': out the gold front door (then the boss). A room id: walk into that room to win. */
+  /** 'frontDoor': out the gold front door (then the boss). A room id: walk into that room (then the boss). */
   goal: 'frontDoor' | string;
   /** Caught by staff: put back on this shelf spot instead of the last checkpoint. */
   shelf?: { floor: number; x: number; y: number };
@@ -727,7 +727,7 @@ export const LEVEL3: LevelDef = {
   goal: 'road',
   // caught: the farmer puts the nugget back in the chicken pen
   shelf: { floor: 0, x: 28.5, y: 6.5 }, caughtTo: 'back in the pen',
-  outside: 'farm', secrets: false, boss: false, intro: 'drop',
+  outside: 'farm', secrets: false, intro: 'drop',
 };
 
 export const LEVELS: Record<LevelId, LevelDef> = { 1: LEVEL1, 2: LEVEL2, 3: LEVEL3 };

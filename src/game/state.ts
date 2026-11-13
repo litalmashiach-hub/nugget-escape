@@ -67,7 +67,19 @@ export type GameEvent =
   | { type: 'mud'; x: number; y: number }
   | { type: 'rush'; x: number; y: number }
   | { type: 'cartCrash'; x: number; y: number }
-  | { type: 'bumped' };
+  | { type: 'bumped' }
+  // the Farmer boss (Level 3)
+  | { type: 'rev' }
+  | { type: 'charge' }
+  | { type: 'crash'; x: number; y: number }
+  | { type: 'tractorSmoke'; x: number; y: number }
+  | { type: 'tractorBoom'; x: number; y: number }
+  | { type: 'rakeSwipe' }
+  | { type: 'dodgeRake' }
+  | { type: 'hooked' }
+  | { type: 'wiggle'; left: number }
+  | { type: 'wriggleFree' }
+  | { type: 'bite' };
 
 export type ChaserMode = 'patrol' | 'alert' | 'chase' | 'search' | 'return' | 'feast';
 
@@ -189,6 +201,8 @@ export interface GameState {
   /** Seconds until the next "mud!" event can fire (so the toast doesn't repeat every step). */
   mudCd: number;
   caughtBy: string | null;
+  /** The Farmer reeled the nugget in on his rake and bit it: the end of the level. */
+  bitten: boolean;
   noBoss: boolean;
   /** Uncle Gus, once the nugget is out of the front door. */
   boss: Boss | null;
@@ -271,6 +285,7 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
     lockedCd: 0,
     mudCd: 0,
     caughtBy: null,
+    bitten: false,
     noBoss: !!opts.noBoss || level.boss === false,
     boss: null,
     shots: [],
@@ -396,6 +411,16 @@ export function currentObjective(state: GameState): Objective | null {
     if (state.unlocked.has(color)) {
       if (color === 'gold' && state.boss) {
         const b = bossDef(state);
+        if (b.farmer) {
+          const tractor = state.boss.phase === 1;
+          return {
+            color, action: 'boss',
+            text: tractor ? 'Squirt ketchup at the tractor!' : 'Squirt ketchup at the Farmer!',
+            hint: tractor
+              ? 'The Farmer is on his tractor, and it is FAST. When it revs up, get out of the red lane: it charges straight ahead and crashes into the fence. Squirt it while the Farmer is dizzy!'
+              : 'The Farmer swings his rake out along the red line. Step aside or DASH through it! If the rake hooks you, press DASH again and again to wriggle free before he pulls you in for a bite!',
+          };
+        }
         return { color, action: 'boss', text: `Squirt ketchup at ${b.the}!`, hint: `${state.difficulty === 'easy' ? `Squirt away: on Easy the ketchup flies at ${b.the} by itself.` : `Face ${b.the} and squirt: the ketchup goes the way you are facing.`} Dodge the ${b.throws}, stay out of the red ring, and when the bottle is empty grab the new one that appears.${b.stamp ? ' When the Manager slams the FIRED stamp, DASH through the shock wave!' : ''}` };
       }
       if (color === 'gold' && goal?.room.outdoor) {

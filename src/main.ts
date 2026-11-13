@@ -1,7 +1,7 @@
 import './style.css';
 import { createGame, currentObjective, update, startFeast, type GameEvent, type GameOptions, type GameState } from './game/state';
 import { botInput } from './game/bot';
-import { beginBossFight, makeBoss, bossDef, ENTRY, MANAGER } from './game/boss';
+import { beginBossFight, makeBoss, bossDef, ENTRY, MANAGER, FARMER, WIGGLES } from './game/boss';
 import { SECRETS } from './game/secrets';
 import { KEY_INFO, type Difficulty } from './game/types';
 import type { LevelId } from './game/levels';
@@ -522,12 +522,17 @@ async function boot() {
         sound.dash();
         break;
       case 'bossIntro':
-        if (useBot) startBoss();
+        // on the farm there's no cutscene: the Farmer comes roaring up the road on his tractor
+        if (useBot || state.level.id === 3) startBoss();
         else playBossCutscene();
         break;
       case 'bossStart':
         setBossUi(true);
         hud.banner(`${bossDef(state).name}!`);
+        if (state.level.id === 3) {
+          hud.toast(`<b>The Farmer:</b> "Not so fast, chicken! Nobody leaves MY farm!" Here he comes on his tractor! ${isTouch() ? 'Hold <b>SQUIRT</b>' : 'Hold <b>F</b> or the mouse button'} to squirt ketchup at it.`, 'danger', 4500);
+          break;
+        }
         if (state.difficulty === 'easy') hud.toast(isTouch() ? `Hold <b>SQUIRT</b>: on Easy the ketchup flies at ${bossDef(state).the} by itself!` : `Hold <b>F</b> or the mouse button: on Easy the ketchup flies at ${bossDef(state).the} by itself!`, '', 4000);
         else hud.toast(isTouch() ? `Turn to face ${bossDef(state).the} and hold <b>SQUIRT</b>!` : `Turn to face ${bossDef(state).the} and hold <b>F</b> or the mouse button to squirt!`, '', 4000);
         break;
@@ -582,9 +587,52 @@ async function boot() {
         sound.caught();
         hud.toast(state.lives > 0 ? `Ouch! ${state.lives} ${state.lives === 1 ? 'life' : 'lives'} left.` : 'Ouch!', 'danger', 1800);
         break;
+      case 'rev':
+        sound.alert();
+        hud.toast('The tractor is revving up! Get out of the <b>red lane</b>!', 'danger', 1300);
+        break;
+      case 'charge':
+        sound.whoosh();
+        break;
+      case 'crash':
+        sound.thud();
+        hud.toast('CRASH! The Farmer is dizzy. Squirt him now!', '', 1600);
+        break;
+      case 'tractorSmoke':
+        sound.thud();
+        hud.toast('The tractor is smoking... RUN! It\'s going to blow!', 'danger', 2000);
+        break;
+      case 'tractorBoom':
+        sound.bossDown();
+        hud.banner('KA-BOOM!');
+        hud.toast('The tractor blew up! Now the Farmer grabs his <b>rake</b>. Keep out of the red line!', 'danger', 3200);
+        break;
+      case 'rakeSwipe':
+        sound.whoosh();
+        break;
+      case 'hooked':
+        sound.caught();
+        hud.toast(isTouch() ? 'Hooked on the rake! Tap <b>DASH</b> again and again to wriggle free!' : 'Hooked on the rake! Press <b>Space</b> again and again to wriggle free!', 'danger', 2200);
+        break;
+      case 'wiggle':
+        sound.dash();
+        if (e.left > 0) hud.toast(`Wriggle! ${e.left} more!`, 'danger', 700);
+        break;
+      case 'wriggleFree':
+        sound.refill();
+        hud.toast('You wriggled free! Squirt him while he stumbles!', '', 1500);
+        break;
+      case 'dodgeRake':
+        sound.refill();
+        hud.toast('Nice dash!', '', 900);
+        break;
+      case 'bite':
+        sound.caught();
+        hud.banner('CHOMP!');
+        break;
       case 'bossDown':
         sound.bossDown();
-        hud.toast(state.level.id === 2 ? 'The Manager is out cold! The office is yours!' : 'Uncle Gus is out of the game! You\'re free!', '', 3000);
+        hud.toast(state.level.id === 3 ? 'The Farmer is flat on his back! The road is yours!' : state.level.id === 2 ? 'The Manager is out cold! The office is yours!' : 'Uncle Gus is out of the game! You\'re free!', '', 3000);
         $('fire-btn').hidden = true;
         break;
       case 'win': {
@@ -603,11 +651,11 @@ async function boot() {
         setTimeout(() => {
           if (mode !== 'ended') return;
           $('win-eyebrow').textContent = lv === 3 ? 'Free range!' : lv === 2 ? 'Employee of the month? Not today!' : 'Freedom!';
-          $('win-title').textContent = lv === 3 ? 'You escaped the farm!' : lv === 2 ? (state.boss ? 'You beat the Manager!' : "You made it to the Manager's Office!") : 'You escaped!';
+          $('win-title').textContent = lv === 3 ? (state.boss ? 'You beat the Farmer!' : 'You escaped the farm!') : lv === 2 ? (state.boss ? 'You beat the Manager!' : "You made it to the Manager's Office!") : 'You escaped!';
           const sub = $('win-sub');
           sub.hidden = lv === 1 && !firstWin;
           sub.textContent = lv === 3
-            ? 'Out on the country road, the nugget is free. Chickens live on farms, but a nugget? A nugget lives wherever it wants!'
+            ? `${state.boss ? 'The tractor is a smoking wreck and the Farmer is flat on his back. ' : ''}Out on the country road, the nugget is free. Chickens live on farms, but a nugget? A nugget lives wherever it wants!`
             : lv === 2
             ? `A sticky note on the manager's desk says: "Why are you alive? To go on adventures, little nugget!"${firstWin ? ` Level 3 unlocked: ${LEVEL_NAMES[3]}!` : ''}`
             : `Level 2 unlocked: ${LEVEL_NAMES[2]}!`;
@@ -640,7 +688,11 @@ async function boot() {
         sound.gameOver();
         sound.stopMusic();
         mode = 'ended';
-        $('over-text').textContent = state.boss && state.level.id === 2
+        $('over-text').textContent = state.boss && state.level.id === 3
+          ? state.bitten
+            ? `The Farmer reeled you in on his rake and... CHOMP! Next time, ${isTouch() ? 'tap DASH' : 'press Space'} again and again (${WIGGLES[state.difficulty]} times) to wriggle off the rake.`
+            : 'The Farmer got you! When the tractor revs up, get out of the red lane, and squirt it while he\'s dizzy.'
+          : state.boss && state.level.id === 2
           ? 'The Manager got you! Keep moving, dodge the pink slips and jump away from the big stomp.'
           : state.boss
           ? 'Uncle Gus got you! Keep moving, dodge the drumsticks and jump away from his belly slam.'
@@ -759,6 +811,16 @@ async function boot() {
       for (const k of state.keys) { k.taken = true; state.held.add(k.color); state.unlocked.add(k.color); }
       state.carts = [];
       state.player.pos = { ...MANAGER.entry };
+      state.status = 'bossIntro';
+      state.boss = makeBoss(state);
+      state.shots = [];
+      onEvent({ type: 'bossIntro' });
+    },
+    /** Level 3: straight into the Farmer boss fight on the country road, as if every key had been found. */
+    toRoad: () => {
+      if (mode !== 'game' || state.level.id !== 3) { openLevels.add(3); level = 3; syncLevels(); start(); }
+      for (const k of state.keys) { k.taken = true; state.held.add(k.color); state.unlocked.add(k.color); }
+      state.player.pos = { ...FARMER.entry };
       state.status = 'bossIntro';
       state.boss = makeBoss(state);
       state.shots = [];
