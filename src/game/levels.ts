@@ -699,8 +699,11 @@ export interface LevelDef {
   boss?: boolean;
   /** How the nugget arrives: walking in (default) or dropped into the pen by the farmer. */
   intro?: 'walk' | 'drop';
-  /** Easter eggs and the nugget rain only live in the house. */
-  secrets: boolean;
+  /**
+   * Easter eggs, and what finding them all does: in the house, nugget rain;
+   * in the grocery store, every employee becomes Employee of the Month.
+   */
+  secrets: false | 'rain' | 'employee';
   /** Shoppers charge with their carts when the nugget gets near a key. */
   carts?: boolean;
 }
@@ -708,7 +711,7 @@ export interface LevelDef {
 export const LEVEL1: LevelDef = {
   id: 1, name: 'The House', floors: FLOORS, start: START,
   keyOrder: ['red', 'teal', 'orange', 'green', 'purple', 'blue', 'pink', 'gold'],
-  goal: 'frontDoor', outside: 'garden', secrets: true,
+  goal: 'frontDoor', outside: 'garden', secrets: 'rain',
 };
 
 export const LEVEL2: LevelDef = {
@@ -717,7 +720,7 @@ export const LEVEL2: LevelDef = {
   keyOrder: ['green', 'orange', 'purple', 'gold'],
   goal: 'office',
   shelf: { floor: 0, x: 68.5, y: 21.6 }, caughtTo: 'back on the shelf',
-  outside: 'parking', secrets: false, carts: true,
+  outside: 'parking', secrets: 'employee', carts: true,
 };
 
 export const LEVEL3: LevelDef = {

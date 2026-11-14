@@ -193,6 +193,31 @@ test('finding every easter egg unlocks the NUGGET RAIN button, and the family st
   expect(errors).toEqual([]);
 });
 
+test('Level 2: the checkout, a shelf and the Stockroom boxes make everyone Employee of the Month', async ({ page }) => {
+  const errors = await open(page, '?level=2&autostart');
+  await page.waitForFunction(() => (window as any).__nugget.state.status === 'playing', undefined, { timeout: 15_000 });
+  const touch = async (x: number, y: number, key: string, egg: string, count: string) => {
+    await page.evaluate(([x, y]) => {
+      const s = (window as any).__nugget.state;
+      for (const k of ['green', 'orange', 'purple']) s.unlocked.add(k);
+      s.player.pos = { x, y };
+      s.player.invuln = 5;
+    }, [x, y]);
+    await page.keyboard.down(key);
+    await expect(page.locator('.toast.secret').last()).toContainText(egg, { timeout: 10_000 });
+    await page.keyboard.up(key);
+    if (count) await expect(page.locator('#hud-secrets')).toContainText(count);
+  };
+  await touch(7, 45.5, 'ArrowUp', 'grocery cart', '1/3');
+  await touch(7.5, 20.5, 'ArrowLeft', 'grapes', '2/3');
+  await touch(23, 7.5, 'ArrowUp', 'Employee of the Month', '');
+  await expect(page.locator('#floor-banner')).toHaveText('Employee of the Month!');
+  await expect(page.locator('#hud-secrets')).toContainText('3/3');
+  await expect(page.locator('#feast-btn')).toBeHidden();
+  expect(await page.evaluate(() => (window as any).__nugget.state.happy)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
 test('the robot player escapes the whole house and sees the win screen', async ({ page }) => {
   test.setTimeout(240_000);
   const errors = await open(page, '?autostart&nofamily&bot&speed=12&seed=1');
@@ -337,7 +362,7 @@ test('the robot player gets through the grocery store and beats the Manager', as
   await expect(page.locator('#screen-win')).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('#win-title')).toHaveText('You beat the Manager!');
   await expect(page.locator('.key-slot.used')).toHaveCount(4);
-  await expect(page.locator('#win-secrets-box')).toBeHidden();
+  await expect(page.locator('#win-secrets-box')).toBeVisible(); // the store has its own easter eggs now
   // beating the store unlocks the farm, which starts on its own with the bus ride
   await expect(page.locator('#win-sub')).toContainText('Level 3 unlocked: The Farm!');
   await expect(page.locator('#btn-next')).toHaveText('Play Level 3');
