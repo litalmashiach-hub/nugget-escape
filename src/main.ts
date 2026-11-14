@@ -2,7 +2,7 @@ import './style.css';
 import { createGame, currentObjective, update, startFeast, type GameEvent, type GameOptions, type GameState } from './game/state';
 import { botInput } from './game/bot';
 import { beginBossFight, makeBoss, bossDef, ENTRY, MANAGER, FARMER, WIGGLES } from './game/boss';
-import { SECRETS } from './game/secrets';
+import { SECRETS, secretsFor } from './game/secrets';
 import { KEY_INFO, type Difficulty } from './game/types';
 import type { LevelId } from './game/levels';
 import { STREET_LENGTH } from './render/street';
@@ -454,16 +454,24 @@ async function boot() {
       case 'secret': {
         const sd = SECRETS.find((s) => s.id === e.id)!;
         sound.secret();
-        const n = state.secrets.size;
-        hud.toast(n === SECRETS.length
-          ? `<span class="em">${sd.emoji}</span> You found ${sd.name} ${sd.where}! That's every easter egg! Press <b>NUGGET RAIN</b>!`
-          : `<span class="em">${sd.emoji}</span> Easter egg! You found ${sd.name} ${sd.where}. (${n}/${SECRETS.length})`, 'secret', 3200);
+        const n = state.secrets.size, total = secretsFor(state.level.id).length;
+        const got = e.id === 'cart' ? `"Beep boop! Have a nice day!" The checkout register gave you ${sd.name}`
+          : e.id === 'grapes' ? `You got ${sd.name} ${sd.where}` : `You found ${sd.name} ${sd.where}`;
+        if (n === total && state.level.secrets === 'employee') break; // the Employee of the Month toast says it all
+        hud.toast(n === total
+          ? `<span class="em">${sd.emoji}</span> ${got}! That's every easter egg! Press <b>NUGGET RAIN</b>!`
+          : `<span class="em">${sd.emoji}</span> Easter egg! ${got}. (${n}/${total})`, 'secret', 3200);
         break;
       }
       case 'feast':
         sound.feast();
         hud.banner('Nugget rain!');
         hud.toast('Chicken nuggets are falling from the ceiling! The family stopped chasing you to eat them.', 'secret', 3600);
+        break;
+      case 'employeeOfMonth':
+        sound.feast();
+        hud.banner('Employee of the Month!');
+        hud.toast('<span class="em">🛒🍇📦</span> Every easter egg found! The whole staff just became Employee of the Month. They are so happy they forgot all about chasing you!', 'secret', 4800);
         break;
       case 'feastEnd':
         hud.toast('Snack time is over. Careful, they are hungry for more!', 'danger', 2600);
@@ -650,7 +658,7 @@ async function boot() {
         if (hasNext) { unlockLevel(next); openLevels.add(next); }
         setTimeout(() => {
           if (mode !== 'ended') return;
-          $('win-eyebrow').textContent = lv === 3 ? 'Free range!' : lv === 2 ? 'Employee of the month? Not today!' : 'Freedom!';
+          $('win-eyebrow').textContent = lv === 3 ? 'Free range!' : lv === 2 ? (state.happy ? 'Everyone is Employee of the Month!' : 'Employee of the month? Not today!') : 'Freedom!';
           $('win-title').textContent = lv === 3 ? (state.boss ? 'You beat the Farmer!' : 'You escaped the farm!') : lv === 2 ? (state.boss ? 'You beat the Manager!' : "You made it to the Manager's Office!") : 'You escaped!';
           const sub = $('win-sub');
           sub.hidden = lv === 1 && !firstWin;
@@ -666,7 +674,7 @@ async function boot() {
           $('win-time').textContent = fmtTime(state.time);
           $('win-spotted').textContent = String(state.timesSpotted);
           $('win-caught').textContent = String(state.timesCaught);
-          $('win-secrets').textContent = `${state.secrets.size}/${SECRETS.length}`;
+          $('win-secrets').textContent = `${state.secrets.size}/${secretsFor(lv).length}`;
           $('win-best').textContent = isBest ? 'New!' : fmtTime(best!);
           $('touch').hidden = true;
           show('screen-win');

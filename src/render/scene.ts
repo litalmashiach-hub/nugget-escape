@@ -237,7 +237,7 @@ export class Scene {
       }
     }
 
-    for (const k of ['!', '?', 'yum'] as const) this.bubbleTex[k] = canvasTexture(bakeBubble(k));
+    for (const k of ['!', '?', 'yum', 'star'] as const) this.bubbleTex[k] = canvasTexture(bakeBubble(k));
     this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.street.group, this.farm.group, this.gus.root, this.manager.root, this.officeCut.group, this.secretFx.group, this.foodFx.group);
     this.gus.root.visible = false;
     this.manager.root.visible = false;
@@ -469,6 +469,9 @@ export class Scene {
         this.secretFx.start(e.id, x, z);
         break;
       }
+      case 'employeeOfMonth':
+        for (const c of state.chasers) if (c.floor === state.player.floor) this.burst(c.pos.x, 1.4, c.pos.y, '#f5c518', 18);
+        break;
       case 'chomp':
         if (e.floor === state.player.floor) for (let i = 0; i < 10; i++) this.particles.emit(e.x, 0.15, e.y, { vx: (Math.random() - 0.5) * 2, vy: 1 + Math.random() * 1.5, vz: (Math.random() - 0.5) * 2, grav: 7, life: 0.6, size: 0.05, color: '#e0a03c' });
         break;
@@ -1047,9 +1050,11 @@ export class Scene {
       const chewing = feasting && c.timer > 0 && !c.moving;
       if (!(cv.model instanceof PersonModel)) cv.model.excited = c.mode === 'chase' || c.mode === 'alert' || feasting ? 1 : 0;
       else cv.model.mouthOpen = chewing ? Math.abs(Math.sin(this.time * 12)) : 0;
-      cv.cone.visible = !feasting;
-      if (!feasting) this.updateCone(state, c, cv);
-      const kind = chewing ? 'yum' : c.mode === 'alert' || (c.mode === 'chase' && c.seesPlayer) ? '!' : c.mode === 'search' || c.mode === 'chase' ? '?' : '';
+      // Employee of the Month (Level 2): no vision cones, just a big gold star and some sparkles
+      cv.cone.visible = !feasting && !state.happy;
+      if (!feasting && !state.happy) this.updateCone(state, c, cv);
+      if (state.happy && Math.random() < dt * 3) this.particles.emit(c.pos.x + (Math.random() - 0.5) * 0.5, cv.model.height * (0.5 + Math.random() * 0.6), c.pos.y + (Math.random() - 0.5) * 0.5, { vy: 0.5, life: 0.9, size: 0.05, color: '#f5c518' });
+      const kind = state.happy ? 'star' : chewing ? 'yum' : c.mode === 'alert' || (c.mode === 'chase' && c.seesPlayer) ? '!' : c.mode === 'search' || c.mode === 'chase' ? '?' : '';
       const showKind = state.status === 'caught' && state.caughtBy === c.def.name ? 'yum' : kind;
       if (showKind) {
         if (showKind !== cv.bubbleKind) { cv.pop = 0; cv.bubble.material.map = this.bubbleTex[showKind]; }

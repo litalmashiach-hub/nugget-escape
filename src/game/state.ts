@@ -1,4 +1,4 @@
-import { SECRETS, touchingSecret, closestPoint, FEAST_TIME, FEAST_RECHARGE, type SecretId } from './secrets';
+import { secretsFor, touchingSecret, closestPoint, FEAST_TIME, FEAST_RECHARGE, type SecretId } from './secrets';
 import { LEVELS, type LevelDef, type LevelId } from './levels';
 import { updateCarts, type Cart } from './carts';
 import { buildMaps, type FloorMap } from './map';
@@ -39,6 +39,8 @@ export type GameEvent =
   | { type: 'key'; color: KeyColor; x: number; y: number }
   | { type: 'secret'; id: SecretId; x: number; y: number }
   | { type: 'feast' }
+  /** Level 2: all three easter eggs found, so every employee is Employee of the Month. */
+  | { type: 'employeeOfMonth' }
   | { type: 'feastEnd' }
   | { type: 'chomp'; id: string; floor: number; x: number; y: number }
   | { type: 'unlock'; color: KeyColor; x: number; y: number }
@@ -190,6 +192,8 @@ export interface GameState {
   timesSpotted: number;
   /** Easter eggs found so far. */
   secrets: Set<SecretId>;
+  /** Level 2: every employee is Employee of the Month and too happy to chase anyone. */
+  happy: boolean;
   /** Nugget rain: seconds left, seconds until it can be used again, and the nuggets on the floors. */
   feastTime: number;
   feastCd: number;
@@ -276,6 +280,7 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
     time: 0,
     timesSpotted: 0,
     secrets: new Set(),
+    happy: false,
     feastTime: 0,
     feastCd: 0,
     food: [],
@@ -503,7 +508,7 @@ export function update(state: GameState, input: Input, dt: number) {
 
 /** True once every easter egg is found and the nugget rain is charged. */
 export function canFeast(state: GameState) {
-  return state.level.secrets && state.secrets.size === SECRETS.length && state.feastCd <= 0 && state.feastTime <= 0
+  return state.level.secrets === 'rain' && state.secrets.size === secretsFor(state.level.id).length && state.feastCd <= 0 && state.feastTime <= 0
     && (state.status === 'playing' || state.status === 'caught');
 }
 
@@ -538,6 +543,23 @@ export function startFeast(state: GameState, rand: () => number = state.rand) {
   }
   state.events.push({ type: 'feast' });
   return true;
+}
+
+/**
+ * Level 2: the nugget found the cart, the grapes and the box, so the whole staff
+ * is named Employee of the Month. They are so happy that they forget all about
+ * the nugget for the rest of the level and just wander around beaming.
+ */
+export function employeeOfTheMonth(state: GameState) {
+  if (state.happy) return;
+  state.happy = true;
+  for (const c of state.chasers) {
+    if (c.mode === 'chase' || c.mode === 'alert') state.events.push({ type: 'lost', id: c.def.id });
+    if (c.mode !== 'patrol') { c.mode = 'patrol'; c.path = []; c.pause = 1.2; c.lookBase = c.facing; }
+    c.seesPlayer = false;
+    c.lastSeen = null;
+  }
+  state.events.push({ type: 'employeeOfMonth' });
 }
 
 function updateFeast(state: GameState, dt: number) {
@@ -678,11 +700,15 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
   }
 
   // Easter eggs
-  if (state.level.secrets) for (const sd of SECRETS) {
-    if (state.secrets.has(sd.id) || !touchingSecret(sd, p.floor, p.pos, PLAYER_RADIUS)) continue;
-    state.secrets.add(sd.id);
-    const c = closestPoint(sd, p.pos);
-    state.events.push({ type: 'secret', id: sd.id, x: c.x, y: c.y });
+  if (state.level.secrets) {
+    const all = secretsFor(state.level.id);
+    for (const sd of all) {
+      if (state.secrets.has(sd.id) || !touchingSecret(sd, p.floor, p.pos, PLAYER_RADIUS)) continue;
+      state.secrets.add(sd.id);
+      const c = closestPoint(sd, p.pos);
+      state.events.push({ type: 'secret', id: sd.id, x: c.x, y: c.y });
+      if (state.level.secrets === 'employee' && state.secrets.size === all.length) employeeOfTheMonth(state);
+    }
   }
 
   // Keys
@@ -705,8 +731,8 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
     p.slipDir = { x: mx / l, y: my / l };
     p.dashTime = 0;
     state.events.push({ type: 'slip', x: p.pos.x, y: p.pos.y });
-    // the splash is loud: staff close by turn to look
-    for (const c of state.chasers) {
+    // the splash is loud: staff close by turn to look (unless they are busy being Employee of the Month)
+    if (!state.happy) for (const c of state.chasers) {
       if (c.floor !== p.floor || Math.hypot(c.pos.x - p.pos.x, c.pos.y - p.pos.y) > SPLASH_RANGE) continue;
       if (c.mode === 'patrol' || c.mode === 'return' || c.mode === 'search') {
         c.mode = 'search';
@@ -866,7 +892,7 @@ function updateChaser(state: GameState, c: Chaser, dt: number) {
     range: c.def.visionRange * s.visionMult,
     fov: (Math.min(360, c.def.fovDeg * (c.def.fovDeg >= 360 ? 1 : s.visionMult)) * Math.PI) / 180,
   };
-  const sees =
+  const sees = !state.happy &&
     sameFloor && !p.hidden && p.invuln <= 0 && canSee(state.maps[c.floor], state.unlocked, viewer, p.pos);
   c.seesPlayer = sees;
   if (sees) {

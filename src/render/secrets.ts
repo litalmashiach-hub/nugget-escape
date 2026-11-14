@@ -1,6 +1,6 @@
 import { THREE, builder, ball, box, cyl, cone } from './kit';
 import type { SecretId } from '../game/secrets';
-import { SECRETS } from '../game/secrets';
+import { secretsFor } from '../game/secrets';
 import type { GameState } from '../game/state';
 
 /** A painted Easter egg (it is an easter egg, after all). */
@@ -72,15 +72,61 @@ function denturesModel() {
   return g;
 }
 
-const MAKERS: Record<SecretId, () => THREE.Group> = { egg: eggModel, book: bookModel, duck: duckModel, box: boxModel, dentures: denturesModel };
+/** A little grocery cart, just the right size for a nugget. */
+function cartModel() {
+  const b = builder(true, false);
+  const g = new THREE.Group();
+  const wire = '#c9d3dc', red = '#e8424a';
+  g.add(box(b, 0, 0.06, 0, 0.3, 0.012, 0.2, wire, { metal: 0.6, rough: 0.3 })); // floor of the basket
+  g.add(box(b, 0, 0.13, 0.1, 0.32, 0.15, 0.012, wire, { metal: 0.6, rough: 0.3 }));
+  g.add(box(b, 0, 0.13, -0.1, 0.32, 0.15, 0.012, wire, { metal: 0.6, rough: 0.3 }));
+  g.add(box(b, 0.155, 0.13, 0, 0.012, 0.15, 0.2, wire, { metal: 0.6, rough: 0.3 }));
+  g.add(box(b, -0.155, 0.13, 0, 0.012, 0.15, 0.2, wire, { metal: 0.6, rough: 0.3 }));
+  g.add(box(b, 0, 0.2, 0, 0.33, 0.02, 0.21, red, { rough: 0.4 })); // red rim
+  g.add(box(b, -0.2, 0.24, 0, 0.012, 0.012, 0.2, red, { rough: 0.4 })); // handle
+  g.add(box(b, -0.18, 0.22, 0.09, 0.05, 0.012, 0.012, wire, { metal: 0.6 }));
+  g.add(box(b, -0.18, 0.22, -0.09, 0.05, 0.012, 0.012, wire, { metal: 0.6 }));
+  for (const [x, z] of [[0.12, 0.08], [0.12, -0.08], [-0.12, 0.08], [-0.12, -0.08]]) {
+    const w = cyl(b, x, 0.025, z, 0.025, 0.018, '#333', { rough: 0.6 });
+    w.rotation.x = Math.PI / 2;
+    g.add(w);
+  }
+  return g;
+}
+
+/** A little box of green grapes. */
+function grapesModel() {
+  const b = builder(true, false);
+  const g = new THREE.Group();
+  g.add(box(b, 0, 0, 0, 0.3, 0.1, 0.22, '#f3e3c3', { rough: 0.9 })); // the punnet
+  g.add(box(b, 0, -0.01, 0.112, 0.22, 0.05, 0.004, '#9b5de5', { rough: 0.7 })); // label
+  const cols = ['#7fc96b', '#9ad66f', '#6bb85a'];
+  let i = 0;
+  for (let x = -0.1; x <= 0.1; x += 0.05) {
+    for (let z = -0.07; z <= 0.07; z += 0.05) {
+      const y = 0.07 + ((i * 7) % 3) * 0.012;
+      g.add(ball(b, x, y, z, 0.03, 0.034, 0.03, cols[i++ % cols.length], { rough: 0.25 }));
+    }
+  }
+  g.add(cyl(b, 0, 0.12, 0, 0.006, 0.06, '#6b4a2a', { rough: 0.8 })); // stem
+  return g;
+}
+
+const MAKERS: Record<SecretId, () => THREE.Group> = {
+  egg: eggModel, book: bookModel, duck: duckModel, box: boxModel, dentures: denturesModel,
+  cart: cartModel, grapes: grapesModel, crate: boxModel,
+};
 /** Height the surprise pops out at: top of the fridge door, the shelf, the tub rim. */
-const START_Y: Record<SecretId, number> = { egg: 1.0, book: 1.1, duck: 0.55, box: 0.9, dentures: 0.7 };
+const START_Y: Record<SecretId, number> = { egg: 1.0, book: 1.1, duck: 0.55, box: 0.9, dentures: 0.7, cart: 0.6, grapes: 1.2, crate: 1.0 };
 export const SECRET_COLORS: Record<SecretId, string[]> = {
   egg: ['#ff9ec7', '#8fd3ff', '#b9f27c', '#fff6e6'],
   book: ['#f5c518', '#c0392b', '#fbf3df'],
   duck: ['#ffd23f', '#ff8c1a', '#8fd3ff'],
   box: ['#c89a5e', '#f5c518', '#ffffff'],
   dentures: ['#fffdf4', '#ff8fa3', '#8fd3ff'],
+  cart: ['#e8424a', '#c9d3dc', '#f5c518'],
+  grapes: ['#7fc96b', '#9b5de5', '#f3e3c3'],
+  crate: ['#c89a5e', '#f5c518', '#ffffff'],
 };
 
 interface Pop { id: SecretId; model: THREE.Group; t: number; x: number; z: number }
@@ -116,10 +162,11 @@ export class SecretFx {
   /** Twinkles near secrets not found yet on this floor, and animates the ones just found. */
   update(state: GameState, dt: number, time: number, emit: (x: number, y: number, z: number, color: string) => void) {
     const p = state.player;
-    for (const sd of SECRETS) {
+    for (const sd of state.level.secrets ? secretsFor(state.level.id) : []) {
       if (sd.floor !== p.floor || state.secrets.has(sd.id) || Math.random() > dt * 1.4) continue;
-      const x = sd.rect.x + Math.random() * sd.rect.w;
-      const z = sd.rect.y + Math.random() * sd.rect.h;
+      const rect = sd.rects[Math.floor(Math.random() * sd.rects.length)];
+      const x = rect.x + Math.random() * rect.w;
+      const z = rect.y + Math.random() * rect.h;
       emit(x, START_Y[sd.id] + Math.random() * 0.4, z, '#fff7d6');
     }
     for (const pop of this.pops) {

@@ -1,6 +1,6 @@
 import { currentObjective, DASH_COOLDOWN, type GameState } from '../game/state';
 import { BOTTLE_SIZE, bossDef } from '../game/boss';
-import { SECRETS, FEAST_RECHARGE } from '../game/secrets';
+import { secretsFor, FEAST_RECHARGE } from '../game/secrets';
 import { KEY_INFO, KEY_ORDER, type KeyColor } from '../game/types';
 import { drawKey, drawNuggetPortrait, makeCanvas } from '../render/paint';
 
@@ -127,7 +127,8 @@ export class Hud {
       this.livesShown = state.lives;
     }
     const feastBtn = $('feast-btn');
-    const allFound = state.secrets.size === SECRETS.length;
+    const eggs = secretsFor(state.level.id);
+    const allFound = state.level.secrets === 'rain' && state.secrets.size === eggs.length;
     if (feastBtn.hidden === allFound) feastBtn.hidden = !allFound;
     if (allFound) {
       const cooling = state.feastCd > 0;
@@ -138,7 +139,7 @@ export class Hud {
       this.secretsShown = state.secrets.size;
       const el = $('hud-secrets');
       el.hidden = this.secretsShown === 0;
-      el.innerHTML = SECRETS.filter((s) => state.secrets.has(s.id)).map((s) => `<span class="em">${s.emoji}</span>`).join('') + ` ${this.secretsShown}/${SECRETS.length}`;
+      el.innerHTML = eggs.filter((s) => state.secrets.has(s.id)).map((s) => `<span class="em">${s.emoji}</span>`).join('') + ` ${this.secretsShown}/${eggs.length}`;
     }
     const obj = currentObjective(state);
     const key = obj ? obj.text + obj.color : '';
