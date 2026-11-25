@@ -778,6 +778,133 @@ export function buildFurniture(it: Furniture): FurnitureBuild {
       b.top = 2.6;
       break;
     }
+    // ------------------------------------------------ laboratory (Level 4)
+    case 'labBench': {
+      // a white lab bench on steel legs, covered in bubbling beakers and flasks (hide underneath)
+      const R = rng(seed);
+      table(b, w, h, 0.9, '#eef2f4', '#8c97a3');
+      box(b, 0.04, 0.9, 0.04, w - 0.08, 0.02, h - 0.08, '#2c3440', { rough: 0.3 });
+      const L = longSide(w, h);
+      for (let a = 0.3; a < L.len - 0.2; a += 0.38 + R() * 0.3) {
+        const col = ['#7ef7d0', '#ff7ab8', '#ffe066', '#7fb8ff', '#b388ff'][Math.floor(R() * 5)];
+        const c = 0.25 + R() * (L.depth - 0.5);
+        const [x, z] = L.vertical ? [c, a] : [a, c];
+        if (R() < 0.5) {
+          cyl(b, x, 0.92, z, 0.07, 0.2, '#dff4ff', { rough: 0.05, metal: 0.1 });
+          cyl(b, x, 0.92, z, 0.062, 0.12, col, { emissive: col, emissiveIntensity: 0.6 });
+        } else {
+          ball(b, x, 1.0, z, 0.2, 0.18, 0.2, col, { emissive: col, emissiveIntensity: 0.6, rough: 0.1 });
+          cyl(b, x, 1.06, z, 0.025, 0.14, '#dff4ff', { rough: 0.05 });
+        }
+      }
+      b.top = 0.9;
+      break;
+    }
+    case 'labCart': {
+      // a steel trolley of spare parts and test tubes (hide underneath)
+      for (const [x, z] of [[0.15, 0.15], [0.85, 0.15], [0.15, 0.85], [0.85, 0.85]]) {
+        cyl(b, x, 0, z, 0.05, 0.06, '#222');
+        cyl(b, x, 0.06, z, 0.025, 0.74, '#c9ced6', { metal: 0.7 });
+      }
+      box(b, 0.08, 0.8, 0.08, 0.84, 0.04, 0.84, '#c9ced6', { metal: 0.7, rough: 0.3 });
+      box(b, 0.08, 0.25, 0.08, 0.84, 0.03, 0.84, '#c9ced6', { metal: 0.7, rough: 0.3 });
+      for (let i = 0; i < 4; i++) cyl(b, 0.25 + i * 0.16, 0.84, 0.5, 0.035, 0.18, ['#7ef7d0', '#ff7ab8', '#ffe066', '#7fb8ff'][i], { emissive: '#ffffff', emissiveIntensity: 0.15 });
+      box(b, 0.25, 0.28, 0.3, 0.4, 0.2, 0.35, '#e07b24');
+      b.top = 0.8;
+      break;
+    }
+    case 'serverRack': {
+      // tall black racks with rows of blinking lights
+      const L = longSide(w, h);
+      const R = rng(seed);
+      L.box(b, 0.05, 0, 0.1, L.len - 0.1, 2.3, L.depth - 0.2, '#1e232b', { rough: 0.5, metal: 0.3 });
+      for (let a = 0.2; a < L.len - 0.2; a += 0.5)
+        for (let y = 0.25; y < 2.2; y += 0.22)
+          for (const side of [0.06, L.depth - 0.08]) {
+            const col = R() < 0.6 ? '#3cff9e' : R() < 0.5 ? '#3fb8ff' : '#ff5a5a';
+            L.box(b, a, y, side, 0.06, 0.04, 0.02, col, { emissive: col, emissiveIntensity: 1.2 });
+          }
+      b.top = 2.3;
+      break;
+    }
+    case 'tank': {
+      // a tall glass specimen tank full of glowing green liquid and bubbles
+      const R = rng(seed);
+      const r = Math.min(w, h) * 0.42;
+      cyl(b, w / 2, 0, h / 2, r + 0.06, 0.25, '#5d6770', { metal: 0.6, rough: 0.35 });
+      cyl(b, w / 2, 0.25, h / 2, r, 1.9, '#7ef7d0', { emissive: '#2fd8a0', emissiveIntensity: 0.7, rough: 0.05 });
+      cyl(b, w / 2, 2.15, h / 2, r + 0.06, 0.2, '#5d6770', { metal: 0.6, rough: 0.35 });
+      for (let i = 0; i < 6 * r * 2; i++) {
+        const a = R() * Math.PI * 2, d = R() * r * 0.7;
+        ball(b, w / 2 + Math.cos(a) * d, 0.5 + R() * 1.5, h / 2 + Math.sin(a) * d, 0.07, 0.07, 0.07, '#e8fff6', { emissive: '#ffffff', emissiveIntensity: 0.5 });
+      }
+      cyl(b, w / 2 + r * 0.6, 2.35, h / 2, 0.03, 0.5, '#8c97a3', { metal: 0.6 });
+      b.top = 2.35;
+      break;
+    }
+    case 'computer': {
+      // a long desk of computers with glowing screens and a keyboard each
+      const L = longSide(w, h);
+      L.box(b, 0.05, 0, 0.1, L.len - 0.1, 0.8, L.depth - 0.2, '#d6dbe4');
+      L.box(b, 0.02, 0.8, 0.05, L.len - 0.04, 0.05, L.depth - 0.1, '#3a4452');
+      for (let a = 0.2; a < L.len - 0.5; a += 0.95) {
+        L.box(b, a, 0.85, 0.15, 0.7, 0.5, 0.06, '#14202c', { emissive: '#3fb8ff', emissiveIntensity: 0.7 });
+        L.box(b, a + 0.05, 0.85, 0.45, 0.6, 0.02, 0.2, '#2a2f38');
+      }
+      break;
+    }
+    case 'robotArm': {
+      // a big orange robot arm on a round base, holding a claw up high
+      cyl(b, w / 2, 0, h / 2, 0.55, 0.3, '#3a4452', { metal: 0.5 });
+      cyl(b, w / 2, 0.3, h / 2, 0.22, 1.0, '#f68b2a', { metal: 0.3, rough: 0.4 });
+      ball(b, w / 2, 1.35, h / 2, 0.38, 0.38, 0.38, '#3a4452', { metal: 0.5 });
+      const upper = box(b, w / 2 - 0.12, 1.35, h / 2 - 0.12, 0.24, 0.9, 0.24, '#f68b2a', { metal: 0.3, rough: 0.4 });
+      upper.rotation.z = 0.6;
+      ball(b, w / 2 - 0.5, 2.05, h / 2, 0.28, 0.28, 0.28, '#3a4452', { metal: 0.5 });
+      for (const s of [-1, 1]) box(b, w / 2 - 0.85, 1.75, h / 2 + s * 0.1 - 0.03, 0.06, 0.32, 0.06, '#c9ced6', { metal: 0.7 });
+      ball(b, w / 2 + 0.3, 0.45, h / 2 + 0.35, 0.08, 0.08, 0.08, '#3cff9e', { emissive: '#3cff9e', emissiveIntensity: 1.5 });
+      b.top = 2.2;
+      break;
+    }
+    case 'locker': {
+      // a row of grey staff lockers
+      const L = longSide(w, h);
+      L.box(b, 0.05, 0, 0.1, L.len - 0.1, 1.9, L.depth - 0.2, '#8c97a3', { metal: 0.4, rough: 0.5 });
+      for (let a = 0.05; a < L.len - 0.1; a += 0.5) {
+        L.box(b, a, 0.05, L.depth - 0.11, 0.02, 1.8, 0.02, '#5d6770');
+        for (const y of [1.55, 1.6, 1.65]) L.box(b, a + 0.12, y, L.depth - 0.11, 0.26, 0.02, 0.02, '#5d6770');
+      }
+      break;
+    }
+    case 'cage': {
+      // an empty test cage with a number tag, a little straw and a water bottle
+      box(b, 0.1, 0, 0.1, w - 0.2, 0.06, h - 0.2, '#c9ced6', { metal: 0.6 });
+      box(b, 0.12, 0.06, 0.12, w - 0.24, 0.02, h - 0.24, '#d9b65e', { rough: 1 });
+      for (let x = 0.1; x <= w - 0.1 + 0.001; x += 0.15) {
+        box(b, x - 0.01, 0, 0.1, 0.02, 0.9, 0.02, '#c9ced6', { metal: 0.6 });
+        box(b, x - 0.01, 0, h - 0.12, 0.02, 0.9, 0.02, '#c9ced6', { metal: 0.6 });
+      }
+      for (let z = 0.1; z <= h - 0.1 + 0.001; z += 0.15) {
+        box(b, 0.1, 0, z - 0.01, 0.02, 0.9, 0.02, '#c9ced6', { metal: 0.6 });
+        box(b, w - 0.12, 0, z - 0.01, 0.02, 0.9, 0.02, '#c9ced6', { metal: 0.6 });
+      }
+      box(b, 0.1, 0.9, 0.1, w - 0.2, 0.03, h - 0.2, '#c9ced6', { metal: 0.6 });
+      box(b, w / 2 - 0.22, 0.6, h - 0.08, 0.44, 0.2, 0.02, '#ffffff');
+      cyl(b, w - 0.3, 0.3, 0.3, 0.05, 0.35, '#9fe3ff', { rough: 0.05 });
+      break;
+    }
+    case 'fileCabinet': {
+      // tall filing cabinets, drawers marked TOP SECRET in red
+      const L = longSide(w, h);
+      L.box(b, 0.05, 0, 0.12, L.len - 0.1, 1.5, L.depth - 0.24, '#6f7f6a', { metal: 0.3, rough: 0.5 });
+      for (let a = 0.1; a < L.len - 0.3; a += 0.6)
+        for (let y = 0.1; y < 1.4; y += 0.35) {
+          L.box(b, a, y, L.depth - 0.13, 0.5, 0.3, 0.02, '#7d8d77', { metal: 0.3 });
+          L.box(b, a + 0.18, y + 0.12, L.depth - 0.11, 0.14, 0.04, 0.02, '#c9ced6', { metal: 0.7 });
+          L.box(b, a + 0.05, y + 0.2, L.depth - 0.11, 0.1, 0.06, 0.01, '#e8424a');
+        }
+      break;
+    }
     default:
       box(b, 0.05, 0, 0.05, w - 0.1, 0.8, h - 0.1, WOOD);
   }

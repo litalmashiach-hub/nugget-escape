@@ -187,6 +187,8 @@ const FLOOR_BASE: Record<FloorStyle, string> = {
   straw: '#d9b65e',
   barn: '#9a6a42',
   road: '#7b7166',
+  labTile: '#eef3f5',
+  metal: '#8c97a3',
 };
 
 /** Repeating floor texture covering 2x2 tiles. */
@@ -330,6 +332,46 @@ export function floorTexture(style: FloorStyle): THREE.Texture {
       ctx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
       ctx.stroke();
     }
+  } else if (style === 'labTile') {
+    // clean white lab tiles with pale teal grout and the odd mint tile
+    const s = S / 8;
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 8; x++) {
+        ctx.fillStyle = (x * 5 + y * 3) % 11 === 0 ? '#d4efe7' : shade(base, (R() - 0.5) * 0.05);
+        ctx.fillRect(x * s + 1, y * s + 1, s - 2, s - 2);
+      }
+    ctx.strokeStyle = '#b9d3d6';
+    for (let i = 0; i <= 8; i++) {
+      ctx.beginPath(); ctx.moveTo(i * s, 0); ctx.lineTo(i * s, S); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * s); ctx.lineTo(S, i * s); ctx.stroke();
+    }
+  } else if (style === 'metal') {
+    // steel floor plates with a diamond tread and rivets
+    const s = S / 2;
+    for (let y = 0; y < 2; y++)
+      for (let x = 0; x < 2; x++) {
+        ctx.fillStyle = shade(base, (R() - 0.5) * 0.08);
+        ctx.fillRect(x * s, y * s, s, s);
+        ctx.strokeStyle = 'rgba(30,36,44,0.55)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x * s + 1, y * s + 1, s - 2, s - 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        for (let i = 0; i < 6; i++)
+          for (let j = 0; j < 6; j++) {
+            const cx = x * s + 12 + i * 20 + (j % 2) * 10, cy = y * s + 12 + j * 20;
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(Math.PI / 4);
+            ctx.fillRect(-5, -1.5, 10, 3);
+            ctx.restore();
+          }
+        ctx.fillStyle = 'rgba(20,24,30,0.5)';
+        for (const [rx, ry] of [[6, 6], [s - 6, 6], [6, s - 6], [s - 6, s - 6]]) {
+          ctx.beginPath();
+          ctx.arc(x * s + rx, y * s + ry, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
   } else if (style === 'road') {
     for (let i = 0; i < 2400; i++) {
       ctx.fillStyle = shade(base, (R() - 0.5) * 0.3);
@@ -382,21 +424,24 @@ export function glowTexture(): THREE.Texture {
   return t;
 }
 
-/** Text label texture (for stairs signs). */
-export function labelTexture(text: string, color: string) {
-  const { c, ctx } = makeCanvas(256, 72, 2);
+/** Text label texture (for stairs signs). `width` makes a wider sign; long text shrinks to fit. */
+export function labelTexture(text: string, color: string, width = 256) {
+  const { c, ctx } = makeCanvas(width, 72, 2);
   ctx.fillStyle = 'rgba(16,20,38,0.82)';
   ctx.beginPath();
-  ctx.roundRect(4, 4, 248, 64, 18);
+  ctx.roundRect(4, 4, width - 8, 64, 18);
   ctx.fill();
   ctx.strokeStyle = color;
   ctx.lineWidth = 3;
   ctx.stroke();
   ctx.fillStyle = color;
-  ctx.font = '900 34px "Lilita One", "Arial Rounded MT Bold", sans-serif';
+  let size = 34;
+  const font = () => `900 ${size}px "Lilita One", "Arial Rounded MT Bold", sans-serif`;
+  ctx.font = font();
+  while (size > 12 && ctx.measureText(text).width > width - 30) { size -= 1; ctx.font = font(); }
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, 128, 38);
+  ctx.fillText(text, width / 2, 38);
   return canvasTexture(c);
 }
 

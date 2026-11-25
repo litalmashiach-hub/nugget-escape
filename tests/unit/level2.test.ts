@@ -345,5 +345,6 @@ describe('level 2: the grocery store', () => {
       if (s.status === 'won') wins++;
     }
     expect(wins).toBeGreaterThan(0);
-  });
+    // five full store runs plus boss fights take about 5 s: give them the same budget as the other robot runs
+  }, 20_000);
 });

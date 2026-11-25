@@ -15,6 +15,8 @@ import { bakeBubble, drawSymbol, makeCanvas } from './paint';
 import { LEVEL1, type LevelId } from '../game/levels';
 import { StreetCutscene } from './street';
 import { FarmCutscene } from './farm';
+import { LabTripCutscene } from './labtrip';
+import { laserOn, laserWarning } from '../game/types';
 
 const START = LEVEL1.start as Required<typeof LEVEL1.start>;
 import { INTRO_TIME, type Chaser, type GameEvent, type GameState } from '../game/state';
@@ -22,7 +24,7 @@ import { castRay } from '../game/vision';
 import { SLAM_RADIUS, WAVE_BAND, WAVE_MAX, BOOM_RADIUS, RAKE_WIDTH, autoAim, bossDef, bossRadius, chargeLength, rakeReach } from '../game/boss';
 import { KEY_INFO, type KeyColor } from '../game/types';
 
-export type View = 'game' | 'menu' | 'cutscene' | 'bossIntro' | 'street' | 'farm';
+export type View = 'game' | 'menu' | 'cutscene' | 'bossIntro' | 'street' | 'farm' | 'lab';
 
 export interface SceneOptions {
   /** Cheaper rendering for slow or software GPUs: no shadows, no lamp lights. */
@@ -156,6 +158,8 @@ export class Scene {
   readonly officeCut = new OfficeCutscene();
   readonly street = new StreetCutscene();
   readonly farm = new FarmCutscene();
+  /** Level 4's opening: the Farmer remembers, the walk through town, the newspaper on the tree. */
+  readonly lab = new LabTripCutscene();
   private secretFx = new SecretFx();
   private foodFx = new FoodFx();
   private gus = new BossModel();
@@ -238,7 +242,7 @@ export class Scene {
     }
 
     for (const k of ['!', '?', 'yum', 'star'] as const) this.bubbleTex[k] = canvasTexture(bakeBubble(k));
-    this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.street.group, this.farm.group, this.gus.root, this.manager.root, this.officeCut.group, this.secretFx.group, this.foodFx.group);
+    this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.street.group, this.farm.group, this.lab.group, this.gus.root, this.manager.root, this.officeCut.group, this.secretFx.group, this.foodFx.group);
     this.gus.root.visible = false;
     this.manager.root.visible = false;
     this.farmerBoss.root.visible = false;
@@ -346,7 +350,7 @@ export class Scene {
     let built = false;
     for (const m of state.maps) {
       if (floors.has(m.def.id)) continue;
-      const v = buildFloor(m, lv.outside);
+      const v = buildFloor(m, lv.outside, m.def.id === lv.start.floor);
       v.group.visible = false;
       if (lv.start.plate && m.def.id === lv.start.floor) v.group.add(this.plate);
       floors.set(m.def.id, v);
@@ -519,6 +523,13 @@ export class Scene {
       case 'locked':
         this.shake = Math.max(this.shake, 0.05);
         break;
+      case 'alarm':
+        this.shake = Math.max(this.shake, 0.12);
+        for (let i = 0; i < 18; i++) {
+          const a = Math.random() * Math.PI * 2, sp = 0.6 + Math.random() * 1.6;
+          this.particles.emit(e.x, 0.35, e.y, { vx: Math.cos(a) * sp, vy: 0.6 + Math.random() * 1.5, vz: Math.sin(a) * sp, grav: 3, life: 0.6, size: 0.06, color: '#ff4040' });
+        }
+        break;
       case 'squirt':
         this.nugget.recoil = 1;
         for (let i = 0; i < 4; i++) {
@@ -619,10 +630,10 @@ export class Scene {
     this.ensureEntities(state);
     const p = state.player;
     const bossIntro = view === 'bossIntro';
-    const street = view === 'street' || view === 'farm';
+    const street = view === 'street' || view === 'farm' || view === 'lab';
     const story = view === 'cutscene' || view === 'menu' || street;
     // the farm is out in the morning sun; everywhere else it's evening or night
-    this.atmosphere(view === 'farm' ? this.farm.sky : view === 'game' || view === 'bossIntro' ? (state.level.id === 3 ? 1 : 0) : 0);
+    this.atmosphere(view === 'farm' ? this.farm.sky : view === 'lab' ? this.lab.sky : view === 'game' || view === 'bossIntro' ? (state.level.id === 3 ? 1 : 0) : 0);
     if (street) this.showFloor(0, 0);
     else if (story) this.showFloor(1, START.floor);
     else this.showFloor(state.level.id, p.floor);
@@ -631,6 +642,7 @@ export class Scene {
     this.cutscene.group.visible = story && !street;
     this.street.group.visible = view === 'street';
     this.farm.group.visible = view === 'farm';
+    this.lab.group.visible = view === 'lab';
     this.nugget.root.visible = !story;
     this.gus.root.visible = !story && !!state.boss && p.floor === 0 && state.level.id === 1;
     this.manager.root.visible = !story && !!state.boss && state.level.id === 2;
@@ -649,10 +661,25 @@ export class Scene {
       d.hinge.rotation.y = d.swing * d.amount * Math.PI * 0.47;
     }
 
-    // Lamps flicker gently
+    // Lamps flicker gently (and flash red while the lab alarm is ringing)
+    const alarm = !story && state.alarmCd > 0;
     this.lamps.forEach((l, i) => {
-      if (l.intensity > 0) l.intensity = 5.5 + Math.sin(this.time * 2.3 + i * 1.7) * 0.3 + Math.sin(this.time * 7.1 + i) * 0.15;
+      if (l.intensity <= 0) return;
+      l.intensity = 5.5 + Math.sin(this.time * 2.3 + i * 1.7) * 0.3 + Math.sin(this.time * 7.1 + i) * 0.15;
+      if (alarm) {
+        l.color.set('#ff2a2a');
+        l.intensity *= 0.8 + Math.max(0, Math.sin(this.time * 14)) * 1.2;
+      } else l.color.set('#ffc88a');
     });
+
+    // Laser tripwires blink with the game clock, and flicker just before they switch back on
+    for (const lv of fv.lasers) {
+      const on = laserOn(lv.laser, state.time);
+      const warn = laserWarning(lv.laser, state.time);
+      lv.beam.opacity = on ? 0.8 + Math.sin(this.time * 40) * 0.15 : warn > 0 ? (Math.sin(this.time * 55) > 0 ? 0.45 : 0.05) : 0.05;
+      lv.glow.opacity = on ? 0.3 : 0.04 + warn * 0.12;
+      lv.eyes.color.set(on || warn > 0 ? '#ff4040' : '#5a2020');
+    }
 
     // Keys
     for (const k of state.keys) {
@@ -667,6 +694,7 @@ export class Scene {
     }
 
     if (view === 'farm') this.renderFarm(dt);
+    else if (view === 'lab') this.renderLab(dt);
     else if (street) this.renderStreet(dt);
     else if (story) this.renderStory(dt, view);
     else if (bossIntro) this.renderBossIntro(state, dt);
@@ -683,7 +711,7 @@ export class Scene {
     this.particles.update(dt);
 
     // Shadow-casting moonlight follows the camera focus
-    const focus = view === 'farm' ? this.farm.focus : street ? this.street.focus : story ? new THREE.Vector3(17, 0, 4.5) : bossIntro ? (state.level.id === 2 ? this.officeCut.focus : new THREE.Vector3(15, 0, 24.5)) : this.camTarget;
+    const focus = view === 'farm' ? this.farm.focus : view === 'lab' ? this.lab.focus : street ? this.street.focus : story ? new THREE.Vector3(17, 0, 4.5) : bossIntro ? (state.level.id === 2 ? this.officeCut.focus : new THREE.Vector3(15, 0, 24.5)) : this.camTarget;
     this.sun.position.set(focus.x - 7, 16, focus.z + 9);
     this.sun.target.position.copy(focus);
 
@@ -738,6 +766,17 @@ export class Scene {
     for (const c of this.chasers.values()) { c.model.root.visible = false; c.bubble.visible = false; c.cone.visible = false; }
     this.farm.update(dt, this.camera, this.time);
     if (this.camera.aspect < 0.8) {
+      const dir = this.camera.getWorldDirection(new THREE.Vector3());
+      this.camera.position.addScaledVector(dir, -2.5);
+    }
+    this.camReady = false;
+    this.setDanger(0, dt);
+  }
+
+  private renderLab(dt: number) {
+    for (const c of this.chasers.values()) { c.model.root.visible = false; c.bubble.visible = false; c.cone.visible = false; }
+    this.lab.update(dt, this.camera, this.time);
+    if (this.camera.aspect < 0.8 && !this.lab.closeUp) {
       const dir = this.camera.getWorldDirection(new THREE.Vector3());
       this.camera.position.addScaledVector(dir, -2.5);
     }

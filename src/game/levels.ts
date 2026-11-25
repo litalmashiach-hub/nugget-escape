@@ -677,7 +677,249 @@ export const FARM: FloorDef[] = [
   },
 ];
 
-export type LevelId = 1 | 2 | 3;
+
+// ================================================================ Level 4: the laboratory
+
+/**
+ * Featherstone Labs, at night. The nugget walks in through the front doors, looking for
+ * the truth about the secret experiment the farmer remembered.
+ * Floor 1 is the ground floor (where the nugget starts); floor 0 is the top secret basement.
+ * Key chain: red (lobby) -> Chemistry Lab -> teal -> Robotics Lab -> orange -> Server Room
+ *   -> purple -> Staff Stairwell, down to the basement -> blue (Basement Hall) -> Specimen Room
+ *   -> gold -> the Secret Archive (the goal).
+ * Every key sits behind blinking laser tripwires: cross a beam while it is on and the alarm
+ * brings the scientists and the guards running. Server racks and specimen tanks block the view.
+ */
+const L = (x: number, y: number, w: number, h: number, period: number, on: number, phase: number) => ({ x, y, w, h, period, on, phase });
+
+export const LAB: FloorDef[] = [
+  {
+    id: 0,
+    name: 'Top Secret Basement',
+    rows: [
+      '########################################',
+      '#...................#..................#',
+      '#...................#..................#',
+      '#...................#..................#',
+      '#...................#..................#',
+      '#...................#..................#',
+      '#...................#..................#',
+      '#...................#..................#',
+      '#...................#..................#',
+      '##########b###############f#############',
+      '#......................................#',
+      '#......................................#',
+      '#......................................#',
+      '#......................................#',
+      '#......................................#',
+      '#......................................#',
+      '#......................................#',
+      '#..................................>>..#',
+      '#..................................>>..#',
+      '#......................................#',
+      '#......................................#',
+      '########################################',
+    ],
+    rooms: [
+      { id: 'specimen', name: 'Specimen Room', seed: [10, 4], style: 'labTile', wall: '#b9e3c6', door: 'blue' },
+      { id: 'archive', name: 'Secret Archive', seed: [29, 4], style: 'officeCarpet', wall: '#d9c6a0', door: 'gold' },
+      { id: 'bhall', name: 'Basement Hall', seed: [20, 15], style: 'metal', wall: '#8fa1b3' },
+    ],
+    furniture: [
+      // Specimen Room: bubbling tanks (tall: nobody sees through them), empty test cages, a bench to hide under
+      f('tank', 3, 2, 2, 2, 'solid'),
+      f('tank', 8, 2, 2, 2, 'solid'),
+      f('tank', 13, 2, 2, 2, 'solid'),
+      f('cage', 2, 7, 2, 1, 'solid'),
+      f('cage', 6, 7, 2, 1, 'solid'),
+      f('cage', 10, 7, 2, 1, 'solid'),
+      f('labBench', 10, 5, 4, 1, 'hide'),
+      f('computer', 16, 7, 3, 1, 'solid'),
+      // Secret Archive: rows of filing cabinets and the professor's desk
+      f('fileCabinet', 22, 1, 4, 1, 'solid'),
+      f('fileCabinet', 33, 1, 5, 1, 'solid'),
+      f('fileCabinet', 22, 5, 1, 3, 'solid'),
+      f('fileCabinet', 37, 4, 1, 4, 'solid'),
+      f('officeDesk', 28, 5, 3, 1, 'hide'),
+      // Basement Hall
+      f('labCart', 10, 13, 1, 1, 'hide'),
+      f('labCart', 24, 12, 1, 1, 'hide'),
+      f('labCart', 29, 19, 1, 1, 'hide'),
+      f('boxes', 13, 18, 2, 1, 'solid'),
+      f('boxes', 31, 10, 2, 1, 'solid'),
+      f('locker', 6, 10, 3, 1, 'solid'),
+      f('serverRack', 16, 15, 1, 3, 'solid'),
+      f('serverRack', 25, 15, 1, 3, 'solid'),
+      f('plant', 38, 10, 1, 1, 'solid'),
+      f('plant', 1, 10, 1, 1, 'solid'),
+    ],
+    keys: [
+      { color: 'blue', x: 2, y: 19 },
+      { color: 'gold', x: 18, y: 3 },
+    ],
+    lasers: [
+      // a laser curtain right across the hall
+      L(20, 10, 1, 11, 3.6, 2.2, 0),
+      // around the blue key
+      L(4, 16, 1, 5, 3.0, 1.8, 1.2),
+      L(1, 16, 3, 1, 3.0, 1.8, 1.2),
+      // around the gold key
+      L(16, 1, 1, 5, 2.8, 1.7, 0.4),
+      L(17, 6, 3, 1, 2.8, 1.7, 0.4),
+    ],
+    family: [
+      {
+        id: 'stone', name: 'Officer Stone', kind: 'guard', start: [27, 14],
+        waypoints: [[23, 11], [33, 12], [37, 14], [31, 19], [22, 19], [27, 14]],
+        patrolSpeed: 1.8, chaseSpeed: 3.7, visionRange: 6, fovDeg: 80, giveUp: 3,
+      },
+      {
+        id: 'fizz', name: 'Dr. Fizz', kind: 'scientist', start: [12, 15],
+        waypoints: [[6, 12], [17, 12], [18, 19], [8, 19], [12, 15]],
+        patrolSpeed: 1.6, chaseSpeed: 3.5, visionRange: 5, fovDeg: 85, giveUp: 2.8,
+      },
+      {
+        id: 'featherstone', name: 'Professor Featherstone', kind: 'scientist', start: [6, 5],
+        waypoints: [[2, 5], [11, 4], [15, 6], [6, 4], [12, 7]],
+        patrolSpeed: 1.5, chaseSpeed: 3.5, visionRange: 5.5, fovDeg: 90, giveUp: 3,
+      },
+    ],
+    arriveFromAbove: [33, 17],
+    lights: [[10, 4], [29, 4], [9, 15], [28, 15], [36, 19]],
+  },
+  {
+    id: 1,
+    name: 'Featherstone Labs',
+    rows: [
+      '############################################',
+      '#.............#..............#.............#',
+      '#.............#..............#.............#',
+      '#.............#..............#.............#',
+      '#.............#..............#.............#',
+      '#.............#..............#.............#',
+      '#.............#..............#.............#',
+      '#.............#..............#.............#',
+      '#.............#..............#.............#',
+      '#######r##############t#############o#######',
+      '#..........................................#',
+      '#..........................................#',
+      '#..........................................#',
+      '#..........................................#',
+      '#..........................................#',
+      '#..........................................#',
+      '#..........................................#',
+      '#..........................................#',
+      '#.................................##########',
+      '#................................#.........#',
+      '#................................#.........#',
+      '#................................#.........#',
+      '#................................p.........#',
+      '#................................#.....<<..#',
+      '#................................#.....<<..#',
+      '#................................#.........#',
+      '#................................#.........#',
+      '############################################',
+    ],
+    rooms: [
+      { id: 'chem', name: 'Chemistry Lab', seed: [6, 4], style: 'labTile', wall: '#cfe8e0', door: 'red' },
+      { id: 'robot', name: 'Robotics Lab', seed: [21, 4], style: 'metal', wall: '#d6dbe4', door: 'teal' },
+      { id: 'server', name: 'Server Room', seed: [36, 4], style: 'metal', wall: '#9fb3c8', door: 'orange' },
+      { id: 'stair', name: 'Staff Stairwell', seed: [37, 20], style: 'concrete', wall: '#c9ced6', door: 'purple' },
+      { id: 'lobby', name: 'Lobby', seed: [20, 20], style: 'labTile', wall: '#e6eef2' },
+    ],
+    furniture: [
+      // Chemistry Lab: benches full of bubbling beakers (hide underneath)
+      f('labBench', 7, 2, 5, 1, 'hide'),
+      f('labBench', 2, 6, 4, 1, 'hide'),
+      f('labBench', 8, 6, 4, 1, 'hide'),
+      f('tank', 12, 7, 1, 1, 'solid'),
+      f('locker', 13, 1, 1, 3, 'solid'),
+      // Robotics Lab: robot arms, a computer and a cart of spare parts
+      f('robotArm', 17, 2, 2, 2, 'solid'),
+      f('robotArm', 23, 6, 2, 2, 'solid'),
+      f('computer', 15, 7, 1, 2, 'solid'),
+      f('labCart', 20, 6, 1, 1, 'hide'),
+      f('labBench', 19, 2, 3, 1, 'hide'),
+      // Server Room: tall humming racks block the view
+      f('serverRack', 31, 2, 1, 5, 'solid'),
+      f('serverRack', 34, 2, 1, 5, 'solid'),
+      f('serverRack', 37, 2, 1, 5, 'solid'),
+      f('labCart', 41, 7, 1, 1, 'hide'),
+      // Lobby: the reception desk, specimen display tanks, carts, lockers and plants
+      f('computer', 15, 21, 4, 1, 'solid'),
+      f('tank', 12, 13, 2, 2, 'solid'),
+      f('tank', 25, 15, 2, 2, 'solid'),
+      f('labCart', 9, 15, 1, 1, 'hide'),
+      f('labCart', 28, 12, 1, 1, 'hide'),
+      f('labCart', 6, 23, 1, 1, 'hide'),
+      f('labCart', 38, 12, 1, 1, 'hide'),
+      f('labBench', 3, 19, 3, 1, 'hide'),
+      f('labBench', 26, 22, 3, 1, 'hide'),
+      f('locker', 1, 15, 1, 3, 'solid'),
+      f('locker', 42, 14, 1, 3, 'solid'),
+      f('plant', 1, 26, 1, 1, 'solid'),
+      f('plant', 32, 26, 1, 1, 'solid'),
+      f('plant', 42, 10, 1, 1, 'solid'),
+      // Staff Stairwell
+      f('boxes', 34, 25, 2, 1, 'solid'),
+    ],
+    keys: [
+      { color: 'red', x: 2, y: 11 },
+      { color: 'teal', x: 2, y: 2 },
+      { color: 'orange', x: 27, y: 2 },
+      { color: 'purple', x: 41, y: 2 },
+    ],
+    lasers: [
+      // around the red key in the corner of the lobby
+      L(4, 10, 1, 3, 3.0, 1.8, 0),
+      L(1, 13, 3, 1, 3.0, 1.8, 0),
+      // in front of the teal door
+      L(20, 10, 5, 1, 3.2, 1.6, 1.4),
+      // a laser curtain right across the lobby, east of the reception
+      L(30, 10, 1, 17, 3.4, 2.0, 0.7),
+      // Chemistry Lab: around the teal key
+      L(5, 1, 1, 4, 2.8, 1.6, 0.9),
+      L(1, 4, 4, 1, 2.8, 1.6, 0.9),
+      // Robotics Lab: around the orange key
+      L(25, 1, 1, 4, 3.0, 1.8, 2.0),
+      L(26, 4, 3, 1, 3.0, 1.8, 2.0),
+      // Server Room: around the purple key
+      L(39, 1, 1, 3, 2.6, 1.5, 0.3),
+      L(40, 4, 3, 1, 2.6, 1.5, 0.3),
+    ],
+    family: [
+      {
+        id: 'beaker', name: 'Dr. Beaker', kind: 'scientist', start: [9, 4],
+        waypoints: [[9, 4], [3, 7], [11, 7], [12, 4], [7, 4]],
+        patrolSpeed: 1.5, chaseSpeed: 3.5, visionRange: 5, fovDeg: 85, giveUp: 2.8,
+      },
+      {
+        id: 'gizmo', name: 'Dr. Gizmo', kind: 'scientist', start: [22, 6],
+        waypoints: [[16, 5], [22, 4], [21, 8], [27, 7], [22, 6]],
+        patrolSpeed: 1.5, chaseSpeed: 3.5, visionRange: 5, fovDeg: 85, giveUp: 2.8,
+      },
+      {
+        id: 'byte', name: 'Dr. Byte', kind: 'scientist', start: [33, 7],
+        waypoints: [[30, 7], [33, 1], [36, 7], [38, 2], [42, 6], [35, 1]],
+        patrolSpeed: 1.6, chaseSpeed: 3.5, visionRange: 5, fovDeg: 85, giveUp: 2.8,
+      },
+      {
+        id: 'bolt', name: 'Officer Bolt', kind: 'guard', start: [8, 17],
+        waypoints: [[3, 17], [15, 11], [24, 12], [28, 17], [20, 19], [9, 24], [16, 17]],
+        patrolSpeed: 1.8, chaseSpeed: 3.7, visionRange: 6, fovDeg: 80, giveUp: 3,
+      },
+      {
+        id: 'pippa', name: 'Professor Pippa', kind: 'scientist', start: [36, 14],
+        waypoints: [[32, 12], [41, 11], [40, 16], [35, 16], [32, 24], [31, 19]],
+        patrolSpeed: 1.6, chaseSpeed: 3.5, visionRange: 5.5, fovDeg: 85, giveUp: 2.8,
+      },
+    ],
+    arriveFromBelow: [37, 23],
+    lights: [[7, 4], [22, 4], [36, 4], [10, 18], [25, 19], [38, 21], [37, 13]],
+  },
+];
+
+export type LevelId = 1 | 2 | 3 | 4;
 
 export interface LevelDef {
   id: LevelId;
@@ -692,7 +934,7 @@ export interface LevelDef {
   /** Caught by staff: put back on this shelf spot instead of the last checkpoint. */
   shelf?: { floor: number; x: number; y: number };
   /** What surrounds the building. */
-  outside: 'garden' | 'parking' | 'farm';
+  outside: 'garden' | 'parking' | 'farm' | 'lab';
   /** Where the nugget ends up when caught there (for the toasts), e.g. "back on the shelf". */
   caughtTo?: string;
   /** false: reaching the goal wins at once (no boss fight). */
@@ -733,4 +975,13 @@ export const LEVEL3: LevelDef = {
   outside: 'farm', secrets: false, intro: 'drop',
 };
 
-export const LEVELS: Record<LevelId, LevelDef> = { 1: LEVEL1, 2: LEVEL2, 3: LEVEL3 };
+export const LEVEL4: LevelDef = {
+  id: 4, name: 'The Laboratory', floors: LAB,
+  // walks in through the front doors of the ground floor (floor 1; the basement is floor 0)
+  start: { floor: 1, x: 22, y: 25.4 },
+  keyOrder: ['red', 'teal', 'orange', 'purple', 'blue', 'gold'],
+  goal: 'archive',
+  outside: 'lab', secrets: false, boss: false,
+};
+
+export const LEVELS: Record<LevelId, LevelDef> = { 1: LEVEL1, 2: LEVEL2, 3: LEVEL3, 4: LEVEL4 };

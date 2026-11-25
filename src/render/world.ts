@@ -6,7 +6,7 @@ import { THREE, mat, cutaway, floorTexture, grassTexture, labelTexture, canvasTe
 import { buildFurniture } from './furniture';
 import { drawSymbol, makeCanvas, rng, shade } from './paint';
 import type { FloorMap } from '../game/map';
-import { KEY_INFO, type FloorStyle, type KeyColor } from '../game/types';
+import { KEY_INFO, type FloorStyle, type KeyColor, type Laser } from '../game/types';
 import { ARENA, ROAD_ARENA } from '../game/boss';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
@@ -35,12 +35,21 @@ export interface HideView {
   fade: number;
 }
 
+/** A laser tripwire: its beams, the red glow on the floor and the posts at each end. */
+export interface LaserView {
+  laser: Laser;
+  beam: THREE.MeshBasicMaterial;
+  glow: THREE.MeshBasicMaterial;
+  eyes: THREE.MeshBasicMaterial;
+}
+
 export interface FloorView {
   id: number;
   group: THREE.Group;
   doors: DoorView[];
   hides: HideView[];
   lights: [number, number][];
+  lasers: LaserView[];
 }
 
 /** Collects colored quads into one BufferGeometry. */
@@ -116,7 +125,7 @@ function stairBlocks(map: FloorMap) {
   return blocks;
 }
 
-export type OutsideKind = 'garden' | 'parking' | 'farm';
+export type OutsideKind = 'garden' | 'parking' | 'farm' | 'lab';
 
 /**
  * Bakes every mesh under `root` into one mesh per material, so scenery made of hundreds of
@@ -146,7 +155,8 @@ export function mergeByMaterial(root: THREE.Object3D): THREE.Group {
   return out;
 }
 
-export function buildFloor(map: FloorMap, outsideKind: OutsideKind = 'garden'): FloorView {
+/** `front`: the floor the nugget walks in on (the lab gets its front doors and sign there). */
+export function buildFloor(map: FloorMap, outsideKind: OutsideKind = 'garden', front = false): FloorView {
   const house = outsideKind === 'garden';
   const farm = outsideKind === 'farm';
   const group = new THREE.Group();
@@ -363,6 +373,7 @@ export function buildFloor(map: FloorMap, outsideKind: OutsideKind = 'garden'): 
     cone(yard, x, 1.6 * s, z, 0.65 * s, 1.2 * s, shade('#3a7d45', (R() - 0.5) * 0.3));
   }
   if (outsideKind === 'parking') storefront(yard, map, R);
+  if (outsideKind === 'lab' && front) labFront(yard, map);
   if (farm) farmland(yard, map, R);
   if (house && id === 0) {
     const gold = map.doors.find((d) => d.color === 'gold');
@@ -403,9 +414,10 @@ export function buildFloor(map: FloorMap, outsideKind: OutsideKind = 'garden'): 
 
   if (map.def.spills?.length) group.add(buildSpills(map));
   if (map.def.mud?.length) group.add(buildMud(map));
+  const lasers = buildLasers(map, group);
 
   const lights: [number, number][] = [...map.def.lights];
-  return { id, group, doors, hides, lights };
+  return { id, group, doors, hides, lights, lasers };
 }
 
 /** Outside the grocery store: a parking lot with cars, lamps, a cart corral and the sliding entrance doors. */
@@ -454,6 +466,71 @@ function storefront(yard: ReturnType<typeof builder>, map: FloorMap, R: () => nu
   // welcome mat inside
   box(yard, ex + 0.3, 0.005, H - 2.4, 3.4, 0.02, 1.2, '#2e9e5b', { rough: 1 });
 }
+
+/** Outside Featherstone Labs: a car park, the glass front doors and the glowing sign. */
+function labFront(yard: ReturnType<typeof builder>, map: FloorMap) {
+  const W = map.w, H = map.h;
+  const ex = Math.floor(W / 2) - 2;
+  box(yard, -2, -0.005, H, W + 4, 0.03, 2.2, '#c9c4b8');
+  for (let x = 0; x < W; x += 2.6) {
+    if (x > ex - 1 && x < ex + 5) continue;
+    box(yard, x, 0.0, H + 2.8, 0.08, 0.02, 3.6, '#f4f1e8');
+  }
+  box(yard, ex, 0, H, 4, 2.2, 0.03, '#bfe6ff', { rough: 0.05, metal: 0.3, emissive: '#4ab8a0', emissiveIntensity: 0.2 });
+  box(yard, ex + 1.98, 0, H - 0.01, 0.04, 2.2, 0.05, '#9aa3ad', { metal: 0.6 });
+  box(yard, ex - 1.5, 2.25, H + 0.02, 7, 0.7, 0.1, '#1e2a3a', { emissive: '#1e2a3a', emissiveIntensity: 0.3 });
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(6.6, 0.62), new THREE.MeshBasicMaterial({ map: labelTexture('FEATHERSTONE LABS', '#7ef7d0', 640), transparent: true }));
+  sign.position.set(ex + 2, 2.6, H + 0.13);
+  yard.group.add(sign);
+  for (const x of [-1.5, W / 3, (2 * W) / 3, W + 1.5]) {
+    cyl(yard, x, 0, H + 7.5, 0.07, 3.2, '#555');
+    box(yard, x - 0.25, 3.15, H + 7.35, 0.5, 0.05, 0.3, '#e0fff6', { emissive: '#9fffe0', emissiveIntensity: 1.5 });
+  }
+  // a doormat inside
+  box(yard, ex + 0.3, 0.005, H - 2.4, 3.4, 0.02, 1.2, '#2c3e66', { rough: 1 });
+}
+
+/**
+ * Laser tripwires: two red beams at nugget height between little posts at each end,
+ * and a red glow on the floor under them. The scene blinks them with the game clock.
+ */
+function buildLasers(map: FloorMap, group: THREE.Group): LaserView[] {
+  const views: LaserView[] = [];
+  for (const l of map.def.lasers ?? []) {
+    const beam = new THREE.MeshBasicMaterial({ color: '#ff2a2a', transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false });
+    const glow = new THREE.MeshBasicMaterial({ color: '#ff3b3b', transparent: true, opacity: 0.3, depthWrite: false, toneMapped: false });
+    const eyes = new THREE.MeshBasicMaterial({ color: '#ff4040', toneMapped: false });
+    const across = l.w >= l.h; // the beam runs along x
+    const len = across ? l.w : l.h;
+    const cx = l.x + l.w / 2, cz = l.y + l.h / 2;
+    for (const y of [0.16, 0.42]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(across ? len - 0.1 : 0.035, 0.035, across ? 0.035 : len - 0.1), beam);
+      m.position.set(cx, y, cz);
+      m.renderOrder = 4;
+      group.add(m);
+    }
+    const strip = new THREE.Mesh(new THREE.PlaneGeometry(across ? len : 0.5, across ? 0.5 : len), glow);
+    strip.rotation.x = -Math.PI / 2;
+    strip.position.set(cx, 0.02, cz);
+    strip.renderOrder = 2;
+    group.add(strip);
+    const b = builder(false, false);
+    for (const e of [0, 1]) {
+      const px = across ? l.x + (e ? l.w - 0.06 : 0.06) : cx;
+      const pz = across ? cz : l.y + (e ? l.h - 0.06 : 0.06);
+      box(b, px - 0.06, 0, pz - 0.06, 0.12, 0.55, 0.12, '#3a4452', { metal: 0.5 });
+      for (const y of [0.16, 0.42]) {
+        const eye = new THREE.Mesh(GEO_EYE, eyes);
+        eye.position.set(px, y, pz);
+        group.add(eye);
+      }
+    }
+    group.add(b.group);
+    views.push({ laser: l, beam, glow, eyes });
+  }
+  return views;
+}
+const GEO_EYE = new THREE.SphereGeometry(0.05, 8, 6);
 
 /** Shiny water puddles over the spill tiles, each spill with a yellow wet-floor sign. */
 function buildSpills(map: FloorMap) {

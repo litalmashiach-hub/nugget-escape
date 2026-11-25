@@ -1,4 +1,4 @@
-import { DOOR_LETTERS, TALL_FURNITURE, type FloorDef, type KeyColor } from './types';
+import { DOOR_LETTERS, TALL_FURNITURE, laserOn, type FloorDef, type KeyColor, type Laser } from './types';
 
 export interface Door {
   x: number;
@@ -22,6 +22,8 @@ export class FloorMap {
   private readonly tall: Uint8Array;
   private readonly spill: Uint8Array;
   private readonly mud: Uint8Array;
+  /** Laser index + 1 per tile (0: no laser). */
+  private readonly laser: Uint8Array;
   private readonly doorAt = new Map<number, Door>();
 
   constructor(def: FloorDef) {
@@ -35,6 +37,7 @@ export class FloorMap {
     this.tall = new Uint8Array(n);
     this.spill = new Uint8Array(n);
     this.mud = new Uint8Array(n);
+    this.laser = new Uint8Array(n);
     this.room = new Int16Array(n).fill(-1);
 
     for (let y = 0; y < this.h; y++) {
@@ -69,6 +72,10 @@ export class FloorMap {
     for (const [sx, sy, sw, sh] of def.mud ?? [])
       for (let y = sy; y < sy + sh; y++)
         for (let x = sx; x < sx + sw; x++) if (this.inBounds(x, y)) this.mud[y * this.w + x] = 1;
+    (def.lasers ?? []).forEach((l, i) => {
+      for (let y = l.y; y < l.y + l.h; y++)
+        for (let x = l.x; x < l.x + l.w; x++) if (this.inBounds(x, y)) this.laser[y * this.w + x] = i + 1;
+    });
     def.rooms.forEach((r, i) => this.flood(r.seed[0], r.seed[1], i));
   }
 
@@ -109,6 +116,17 @@ export class FloorMap {
   /** Sticky mud: the nugget wades through slowly (the farmer has boots). */
   isMud(x: number, y: number) {
     return this.inBounds(x, y) && this.mud[y * this.w + x] === 1;
+  }
+  /** The laser tripwire crossing this tile, if any (on or off). */
+  laserAt(x: number, y: number): Laser | undefined {
+    if (!this.inBounds(x, y)) return undefined;
+    const i = this.laser[y * this.w + x];
+    return i ? this.def.lasers![i - 1] : undefined;
+  }
+  /** A laser beam that is switched on right now (game time t). */
+  isLaserOn(x: number, y: number, t: number) {
+    const l = this.laserAt(x, y);
+    return !!l && laserOn(l, t);
   }
   door(x: number, y: number): Door | undefined {
     return this.doorAt.get(y * this.w + x);

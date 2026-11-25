@@ -25,6 +25,9 @@ export const SLIP_SPEED = 1.5;
 export const SPLASH_RANGE = 6.5;
 /** Mud puddles: walking speed while wading through (times normal). */
 export const MUD_SPEED = 0.5;
+/** Laser tripwires: how far away the alarm brings people running, and how long until it can go off again. */
+export const ALARM_RANGE = 15;
+export const ALARM_COOLDOWN = 3;
 
 export interface Input {
   mx: number;
@@ -67,6 +70,8 @@ export type GameEvent =
   | { type: 'bottle'; x: number; y: number }
   | { type: 'slip'; x: number; y: number }
   | { type: 'mud'; x: number; y: number }
+  /** Level 4: the nugget walked into a laser beam that was switched on. */
+  | { type: 'alarm'; x: number; y: number; floor: number }
   | { type: 'rush'; x: number; y: number }
   | { type: 'cartCrash'; x: number; y: number }
   | { type: 'bumped' }
@@ -204,6 +209,10 @@ export interface GameState {
   lockedCd: number;
   /** Seconds until the next "mud!" event can fire (so the toast doesn't repeat every step). */
   mudCd: number;
+  /** Seconds until a laser tripwire can set off the alarm again. */
+  alarmCd: number;
+  /** How many times the nugget set off the alarm. */
+  alarms: number;
   caughtBy: string | null;
   /** The Farmer reeled the nugget in on his rake and bit it: the end of the level. */
   bitten: boolean;
@@ -289,6 +298,8 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
     events: [],
     lockedCd: 0,
     mudCd: 0,
+    alarmCd: 0,
+    alarms: 0,
     caughtBy: null,
     bitten: false,
     noBoss: !!opts.noBoss || level.boss === false,
@@ -499,6 +510,7 @@ export function update(state: GameState, input: Input, dt: number) {
   state.time += dt;
   state.lockedCd = Math.max(0, state.lockedCd - dt);
   state.mudCd = Math.max(0, state.mudCd - dt);
+  state.alarmCd = Math.max(0, state.alarmCd - dt);
   updateFeast(state, dt);
   updatePlayer(state, input, dt);
   if (state.status !== 'playing') return;
@@ -744,6 +756,10 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
     }
   }
 
+  // Laser tripwires: walk into a beam while it is on and the alarm goes off. Everyone close by
+  // comes running to where it went off (the nugget gets away if it hides or runs).
+  if (p.invuln <= 0 && state.alarmCd <= 0 && map.isLaserOn(tx, ty, state.time)) soundAlarm(state);
+
   // Level 2: made it into the Manager's Office (where the Manager catches the nugget snooping);
   // Level 3: out of the farm gate onto the country road (free!);
   // Level 1: out through the front door (where Uncle Gus is waiting)
@@ -790,6 +806,25 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
       p.facing = awayFromStairs(state.maps[to], p.pos) ?? p.facing + Math.PI;
       state.checkpoint = { floor: to, x: p.pos.x, y: p.pos.y };
       state.events.push({ type: 'floor', floor: to });
+    }
+  }
+}
+
+/** BEEP BEEP: a laser tripwire went off where the nugget is standing. */
+export function soundAlarm(state: GameState) {
+  const p = state.player;
+  state.alarmCd = ALARM_COOLDOWN;
+  state.alarms++;
+  state.events.push({ type: 'alarm', x: p.pos.x, y: p.pos.y, floor: p.floor });
+  for (const c of state.chasers) {
+    if (c.floor !== p.floor || Math.hypot(c.pos.x - p.pos.x, c.pos.y - p.pos.y) > ALARM_RANGE) continue;
+    if (c.mode === 'patrol' || c.mode === 'return' || c.mode === 'search') {
+      c.mode = 'chase';
+      c.lastSeen = { x: p.pos.x, y: p.pos.y };
+      c.sinceSeen = 0;
+      c.pause = 0;
+      c.path = [];
+      c.pathTimer = 0;
     }
   }
 }

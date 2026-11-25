@@ -37,6 +37,18 @@ It opens with a bus ride: the nugget walks out of FreshMart and works it out: nu
   - **Phase 2: the rake.** The Farmer climbs out of the smoke and swings his long **rake** out along a red line. Step aside or **dash** through it. If the rake hooks you he reels you in, and if he gets to bite you it's the end of the level, however many lives you have left! Press **DASH again and again** (2 times on Easy, 3 on Normal, 4 on Hard) to wriggle off the rake. Squirt him until he's flat on his back to escape the farm and win.
 - **Pip the puppy** guards the Apple Orchard, where apple trees block the view.
 
+## Level 4: The Laboratory
+
+Beat Level 3 and **Level 4** unlocks (the secret code `shalevisbest` unlocks it too). It starts by itself a few seconds after the Level 3 win screen (or press **Play Level 4**).
+
+It opens out on the country road: the Farmer gets back on his feet and remembers the nugget: "Hey, I remember you! You are the chicken that was taken to the laboratory for some secret testing. How are you still alive?! Did their experiment work?!" The nugget walks into town thinking really hard about it, finds a newspaper (*The Daily Cluck*) stapled to a tree with the laboratory's address on it, **Featherstone Labs, 7 Beaker Lane**, and heads straight there. Then the level starts:
+
+- Two floors: the ground floor (Lobby, Chemistry Lab, Robotics Lab, Server Room and the Staff Stairwell) and the **Top Secret Basement** (Basement Hall, Specimen Room and the Secret Archive).
+- **Laser tripwires** guard every key, and laser curtains cross the lobby and the basement hall. They blink on and off (and flicker just before they switch back on). Walk into a beam while it is on and the **alarm** goes off: the lights flash red and everyone close by comes running to look. Wait for the beams to switch off, then go.
+- Scientists in lab coats (Dr. Beaker, Dr. Gizmo, Dr. Byte, Professor Pippa, Dr. Fizz and Professor Featherstone) and the security guards (Officer Bolt and Officer Stone) chase the nugget on sight. If one catches you, you lose a life and go back to the last door you opened.
+- Server racks and the big glowing specimen tanks block their view. Hide under the lab benches and the carts.
+- Six keys: Red (lobby) → Chemistry Lab → Teal → Robotics Lab → Orange → Server Room → Purple → Staff Stairwell, down to the basement → Blue (Basement Hall) → Specimen Room → Gold → the **Secret Archive**, where the nugget finds its file.
+
 ## Play on a phone
 
 The game works on iPhone and Android in portrait or landscape, with a joystick and big buttons. Open the link in Safari or Chrome. For full screen, tap the full screen button (Android), or use **Share → Add to Home Screen** (iPhone) to get a Nugget Escape icon that opens without the browser bars.
