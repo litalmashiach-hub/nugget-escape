@@ -51,7 +51,10 @@ function saveBest(d: Difficulty, t: number, level: LevelId = 1) {
 function levelUnlocked(id: LevelId) {
   if (id === 1) return true;
   try {
-    return localStorage.getItem(`nugget-level${id}`) === '1';
+    if (localStorage.getItem(`nugget-level${id}`) === '1') return true;
+    // A best time on the level before means it was beaten, even before this level existed.
+    const prev = (id - 1) as LevelId;
+    return (['easy', 'normal', 'hard'] as const).some((d) => localStorage.getItem(bestKey(d, prev)) !== null);
   } catch {
     return false;
   }

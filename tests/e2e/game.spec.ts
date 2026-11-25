@@ -314,6 +314,22 @@ test('typing the secret code "shalevisbest" unlocks Levels 2, 3 and 4 without be
   expect(errors).toEqual([]);
 });
 
+test('someone who beat Level 3 before Level 4 existed finds Level 4 open', async ({ page }) => {
+  const errors = await open(page);
+  await expect(page.locator('#level-4')).toBeDisabled();
+  // an old save: Levels 2 and 3 unlocked and a best time on the farm, but no Level 4 flag
+  await page.evaluate(() => {
+    localStorage.setItem('nugget-level2', '1');
+    localStorage.setItem('nugget-level3', '1');
+    localStorage.setItem('nugget-best-l3-normal', '321.5');
+  });
+  await page.reload();
+  await page.waitForFunction(() => (window as any).__nugget?.mode !== undefined);
+  await expect(page.locator('#level-4')).toBeEnabled();
+  await expect(page.locator('#level-4 .lv-lock')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
 test('Level 2: water spills make the nugget slide, and a shopper charges with a cart near a key', async ({ page }) => {
   const errors = await open(page, '?level=2&autostart&nofamily&seed=1');
   await page.waitForFunction(() => (window as any).__nugget.state.status === 'playing');
