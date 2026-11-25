@@ -501,7 +501,13 @@ const LOOKS: Record<Exclude<FamilyKind, 'dog'>, Look> = {
   // the farm: denim overalls (extra) over checked shirts
   farmer: { shirt: '#c0392b', pants: '#3d5f95', skin: '#e8b48a', hair: '#8a8a8a', scale: 1.1, extra: '#3d5f95' },
   farmhand: { shirt: '#58a05a', pants: '#6b4f3a', skin: '#c68642', hair: '#2b1d14', scale: 0.98, extra: '#8a6a45' },
+  // the laboratory: long white lab coats (extra) and goggles; guards in navy with a cap and a badge
+  scientist: { shirt: '#7fb8e8', pants: '#3b3b4f', skin: '#e0ac69', hair: '#5b3a29', scale: 1.0, extra: '#f7f9fb' },
+  guard: { shirt: '#2c3e66', pants: '#1f2a44', skin: '#c68642', hair: '#141010', scale: 1.08, extra: '#f5c518' },
 };
+
+/** Scientists' hair, so the lab staff don't all look like twins (picked from the name). */
+const SCIENCE_HAIR = ['#5b3a29', '#dcdcdc', '#e6be5a', '#141010', '#a0442a'];
 
 const FARM = new Set(['farmer', 'farmhand']);
 
@@ -601,11 +607,31 @@ export class PersonModel {
       for (let i = 0; i < 4; i++) this.body.add(cbox(b, 0, 0.98 + i * 0.12, -0.165, 0.42, 0.03, 0.02, shade(L.shirt, -0.3)));
     }
 
+    if (kind === 'scientist') {
+      // a long white lab coat: front panels, a collar, a pocket with pens
+      const coat = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.31, 0.95, 16, 1, true), mat(L.extra!, { rough: 0.8, unique: true }));
+      coat.position.y = 0.95;
+      coat.scale.set(1, 1, 0.82);
+      coat.castShadow = true;
+      (coat.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+      this.body.add(coat);
+      for (const sx of [-0.1, 0.1]) this.body.add(cbox(b, sx, 1.33, 0.16, 0.12, 0.2, 0.03, L.extra!));
+      this.body.add(cbox(b, -0.12, 1.15, 0.2, 0.1, 0.1, 0.01, '#e6ebef'));
+      this.body.add(cbox(b, -0.14, 1.22, 0.205, 0.015, 0.08, 0.01, '#3d7df0'));
+      this.body.add(cbox(b, -0.1, 1.22, 0.205, 0.015, 0.08, 0.01, '#e8424a'));
+    }
+    if (kind === 'guard') {
+      // a shiny badge and a belt
+      this.body.add(ball(b, -0.11, 1.28, 0.17, 0.06, 0.07, 0.02, L.extra!, { metal: 0.7, rough: 0.3 }));
+      this.body.add(cbox(b, 0, 0.86, 0, 0.46, 0.07, 0.36, '#111111'));
+      this.body.add(cbox(b, 0, 0.86, 0.18, 0.08, 0.06, 0.02, '#c9ced6', { metal: 0.7 }));
+    }
+
     // arms
     this.armL = pivot(this.body, -0.29, 1.4, 0);
     this.armR = pivot(this.body, 0.29, 1.4, 0);
     for (const arm of [this.armL, this.armR]) {
-      limb(b, arm, 0.062, 0.56, L.shirt);
+      limb(b, arm, 0.062, 0.56, kind === 'scientist' ? L.extra! : L.shirt);
       arm.add(ball(b, 0, -0.6, 0, 0.13, 0.13, 0.13, L.skin));
     }
     if (kind === 'farmer') {
@@ -705,6 +731,21 @@ export class PersonModel {
         this.head.add(ball(b, 0, 0.06, -0.02, 0.38, 0.27, 0.38, hair));
         this.head.add(ball(b, 0, 0.1, 0, 0.39, 0.22, 0.39, '#e8e1cf')); // cap
         this.head.add(cbox(b, 0, 0.1, 0.2, 0.22, 0.03, 0.16, '#e8e1cf')); // cap brim
+        break;
+      case 'scientist': {
+        // wild hair and safety goggles pushed up on the forehead
+        const h = SCIENCE_HAIR[Math.floor(Math.abs(Math.sin(this.root.id * 12.9898)) * SCIENCE_HAIR.length)];
+        this.head.add(ball(b, 0, 0.07, -0.03, 0.39, 0.28, 0.39, h));
+        for (const s of [-1, 1]) this.head.add(ball(b, s * 0.17, 0.08, -0.04, 0.12, 0.16, 0.14, h));
+        this.head.add(cbox(b, 0, 0.13, 0.1, 0.36, 0.05, 0.2, '#2a2a2a'));
+        for (const s of [-1, 1]) this.head.add(ball(b, s * 0.075, 0.14, 0.19, 0.1, 0.08, 0.04, '#9fe3ff', { rough: 0.05, metal: 0.3, emissive: '#3fb8e8', emissiveIntensity: 0.3 }));
+        break;
+      }
+      case 'guard':
+        this.head.add(ball(b, 0, 0.06, -0.02, 0.38, 0.26, 0.38, hair));
+        this.head.add(ball(b, 0, 0.11, 0, 0.4, 0.2, 0.4, '#1f2a44')); // cap
+        this.head.add(cbox(b, 0, 0.1, 0.2, 0.24, 0.03, 0.17, '#141a2a')); // cap brim
+        this.head.add(ball(b, 0, 0.17, 0.18, 0.06, 0.06, 0.02, L.extra!, { metal: 0.7, rough: 0.3 })); // cap badge
         break;
       case 'brother':
         this.head.add(ball(b, 0, 0.06, -0.02, 0.38, 0.28, 0.38, hair));

@@ -33,7 +33,9 @@ export interface Vec {
 
 export type FloorStyle = 'wood' | 'parquet' | 'checker' | 'bathTile' | 'carpetBlue' | 'carpetRose' | 'attic' | 'living' | 'storeTile' | 'concrete' | 'officeCarpet'
   // farm (Level 3)
-  | 'grass' | 'dirt' | 'straw' | 'barn' | 'road';
+  | 'grass' | 'dirt' | 'straw' | 'barn' | 'road'
+  // laboratory (Level 4)
+  | 'labTile' | 'metal';
 
 export type FurnitureKind =
   | 'counter' | 'fridge' | 'island' | 'kitchenTable' | 'diningTable' | 'sideboard' | 'cabinet' | 'plant'
@@ -46,10 +48,12 @@ export type FurnitureKind =
   | 'shelf' | 'freezer' | 'produce' | 'checkout' | 'deli' | 'cart' | 'rack' | 'pallet' | 'bakery' | 'officeDesk' | 'trophyCase'
   // farm (Level 3)
   | 'hay' | 'haystack' | 'trough' | 'coop' | 'hen' | 'tractor' | 'corn' | 'cow' | 'pigsty' | 'well' | 'scarecrow'
-  | 'pumpkins' | 'workbench' | 'barrel' | 'wheelbarrow' | 'milkCans' | 'woodpile' | 'appleTree';
+  | 'pumpkins' | 'workbench' | 'barrel' | 'wheelbarrow' | 'milkCans' | 'woodpile' | 'appleTree'
+  // laboratory (Level 4)
+  | 'labBench' | 'labCart' | 'serverRack' | 'tank' | 'computer' | 'robotArm' | 'locker' | 'cage' | 'fileCabinet';
 
-/** Furniture tall enough to block sight (store shelves and racks, rows of corn, haystacks, apple trees). */
-export const TALL_FURNITURE: ReadonlySet<FurnitureKind> = new Set<FurnitureKind>(['shelf', 'rack', 'corn', 'haystack', 'appleTree']);
+/** Furniture tall enough to block sight (store shelves and racks, rows of corn, haystacks, apple trees, server racks, specimen tanks). */
+export const TALL_FURNITURE: ReadonlySet<FurnitureKind> = new Set<FurnitureKind>(['shelf', 'rack', 'corn', 'haystack', 'appleTree', 'serverRack', 'tank']);
 
 /**
  * solid: blocks everyone.
@@ -86,7 +90,9 @@ export type FamilyKind = 'dad' | 'mom' | 'sister' | 'grandma' | 'brother' | 'dog
   // a shopper pushing a cart (Level 2 hazard, not a chaser)
   | 'shopper'
   // the farm (Level 3): the farmer carries a rake
-  | 'farmer' | 'farmhand';
+  | 'farmer' | 'farmhand'
+  // the laboratory (Level 4): scientists in lab coats and security guards
+  | 'scientist' | 'guard';
 
 export interface FamilyDef {
   id: string;
@@ -119,6 +125,35 @@ export interface FloorDef {
   spills?: [number, number, number, number][];
   /** Sticky mud puddles as [x, y, w, h] tile rectangles (Level 3): the nugget wades through slowly. */
   mud?: [number, number, number, number][];
+  /** Blinking laser tripwires (Level 4): stepping into a beam while it is on sets off the alarm. */
+  lasers?: Laser[];
+}
+
+/**
+ * A laser tripwire across a [x, y, w, h] tile rectangle (one tile thick). It blinks: on for `on`
+ * seconds out of every `period`, shifted by `phase` seconds so neighbouring beams don't blink together.
+ */
+export interface Laser {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  period: number;
+  on: number;
+  phase: number;
+}
+
+/** Is this laser beam switched on at game time t? */
+export function laserOn(l: Laser, t: number) {
+  const k = (((t + l.phase) % l.period) + l.period) % l.period;
+  return k < l.on;
+}
+
+/** 0..1: how soon the beam switches back on (for the warning flicker), 0 while it is on. */
+export function laserWarning(l: Laser, t: number, lead = 0.6) {
+  const k = (((t + l.phase) % l.period) + l.period) % l.period;
+  const left = l.period - k;
+  return k >= l.on && left < lead ? 1 - left / lead : 0;
 }
 
 export type Difficulty = 'easy' | 'normal' | 'hard';

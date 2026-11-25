@@ -293,14 +293,16 @@ test('Level 2: a store employee puts the nugget back on the shelf', async ({ pag
   expect(errors).toEqual([]);
 });
 
-test('typing the secret code "shalevisbest" unlocks Levels 2 and 3 without beating Level 1', async ({ page }) => {
+test('typing the secret code "shalevisbest" unlocks Levels 2, 3 and 4 without beating Level 1', async ({ page }) => {
   const errors = await open(page);
   await expect(page.locator('#level-2')).toBeDisabled();
   await expect(page.locator('#level-3')).toBeDisabled();
+  await expect(page.locator('#level-4')).toBeDisabled();
   await page.keyboard.type('shalevisbest');
   await expect(page.locator('#level-2')).toBeEnabled();
   await expect(page.locator('#level-3')).toBeEnabled();
-  await expect(page.locator('#cheat-note')).toHaveText('Secret code accepted: Levels 2 and 3 unlocked!');
+  await expect(page.locator('#level-4')).toBeEnabled();
+  await expect(page.locator('#cheat-note')).toHaveText('Secret code accepted: Levels 2, 3 and 4 unlocked!');
   await page.locator('#level-2').click();
   await page.locator('#btn-play').click();
   expect(await page.evaluate(() => (window as any).__nugget.mode)).toBe('street');
@@ -462,8 +464,90 @@ test('the robot player escapes the farm through the gold gate and beats the Farm
   await expect(page.locator('#screen-win')).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('#win-title')).toHaveText('You beat the Farmer!');
   await expect(page.locator('.key-slot.used')).toHaveCount(8);
+  // beating the farm unlocks the laboratory, which starts on its own with the walk into town
+  await expect(page.locator('#win-sub')).toContainText('Level 4 unlocked: The Laboratory!');
+  await expect(page.locator('#btn-next')).toHaveText('Play Level 4');
+  await expect(page.locator('#win-next-note')).toContainText('Level 4 starts in');
+  await expect.poll(() => page.evaluate(() => (window as any).__nugget.mode), { timeout: 15_000 }).toBe('lab');
+  expect(await page.evaluate(() => (window as any).__nugget.state.level.id)).toBe(4);
+  await page.evaluate(() => (window as any).__nugget.toMenu());
+  await expect(page.locator('#level-4')).toBeEnabled();
+  expect(errors).toEqual([]);
+});
+
+test('Level 4 opens with the Farmer remembering the nugget and a newspaper on a tree, then starts in the lab', async ({ page }) => {
+  const errors = await open(page, '?level=4');
+  await expect(page.locator('#level-4')).toHaveClass(/on/);
+  await expect(page.locator('#title-eyebrow')).toHaveText('Level 4: The Laboratory');
+  await page.locator('#btn-play').click();
+  await expect(page.locator('#cutscene')).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__nugget.mode)).toBe('lab');
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(3));
+  await expect(page.locator('#cutscene-who')).toHaveText('The Farmer');
+  await expect(page.locator('#cutscene-text')).toHaveText('Hey, I remember you! You are the chicken that was taken to the laboratory for some secret testing.');
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(7));
+  await expect(page.locator('#cutscene-text')).toHaveText('How are you still alive?! Did their experiment work?!');
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(12.5));
+  await expect(page.locator('#cutscene-text')).toContainText('thinking really hard about what the farmer said');
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(21));
+  await expect(page.locator('#cutscene-text')).toContainText('A newspaper, stapled to a tree!');
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(23));
+  await expect(page.locator('#cutscene-who')).toHaveText('THE DAILY CLUCK');
+  await expect(page.locator('#cutscene-text')).toContainText('7 Beaker Lane');
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(29));
+  await expect(page.locator('#cutscene-text')).toContainText("I'm going!");
+  // the cutscene hands over to the game by itself at the end
+  await page.evaluate(() => (window as any).__nugget.seekCutscene(36.9));
+  await expect.poll(() => page.evaluate(() => (window as any).__nugget.mode), { timeout: 5000 }).toBe('game');
+  await expect(page.locator('#hud')).toBeVisible();
+  await expect(page.locator('.key-slot')).toHaveCount(6);
+  await expect(page.locator('#hud-floor')).toHaveText('Featherstone Labs');
+  await expect(page.locator('#hud-objective .obj-text')).toHaveText('Find the Red key');
+  await expect(page.locator('.toast').filter({ hasText: 'Sneak into Featherstone Labs' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('Level 4: walking into a laser while it is on sets off the alarm', async ({ page }) => {
+  const errors = await open(page, '?level=4&autostart&seed=1');
+  await page.waitForFunction(() => (window as any).__nugget.state.status === 'playing');
+  await page.evaluate(() => {
+    const s = (window as any).__nugget.state;
+    // just as the laser curtain across the lobby switches on
+    const l = s.maps[1].def.lasers.find((l: any) => l.x === 30 && l.h === 17);
+    const k = (((s.time + l.phase) % l.period) + l.period) % l.period;
+    s.time += l.period - k + 0.05;
+    s.player.pos = { x: 29.5, y: 24.5 };
+  });
+  await page.keyboard.down('ArrowRight');
+  await expect(page.locator('.toast.danger').filter({ hasText: 'You tripped a laser' })).toBeVisible({ timeout: 4000 });
+  await page.keyboard.up('ArrowRight');
+  expect(await page.evaluate(() => (window as any).__nugget.state.alarms)).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test('Level 4: down in the basement, the gold door opens the Secret Archive and wins the level', async ({ page }) => {
+  const errors = await open(page, '?level=4&autostart&nofamily&seed=1');
+  await page.waitForFunction(() => (window as any).__nugget.state.status === 'playing');
+  await page.evaluate(() => (window as any).__nugget.toArchive());
+  await expect(page.locator('#hud-floor')).toHaveText('Top Secret Basement');
+  await expect(page.locator('#hud-objective .obj-text')).toHaveText('Open the Secret Archive!');
+  await page.keyboard.down('ArrowUp');
+  await expect(page.locator('#screen-win')).toBeVisible({ timeout: 10_000 });
+  await page.keyboard.up('ArrowUp');
+  await expect(page.locator('#win-title')).toHaveText('You found the secret files!');
+  await expect(page.locator('#win-sub')).toContainText('PROJECT SPARK');
   await expect(page.locator('#btn-next')).toBeHidden();
   await expect(page.locator('#win-next-note')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('the robot player sneaks through the whole laboratory to the Secret Archive', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await open(page, '?level=4&autostart&nofamily&bot&speed=12&seed=1');
+  await expect.poll(async () => (await snap(page)).status, { timeout: 120_000, intervals: [250] }).toBe('won');
+  await expect(page.locator('#screen-win')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('#win-title')).toHaveText('You found the secret files!');
+  await expect(page.locator('.key-slot.used')).toHaveCount(6);
   expect(errors).toEqual([]);
 });
 
