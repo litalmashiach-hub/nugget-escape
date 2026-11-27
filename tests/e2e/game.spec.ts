@@ -447,6 +447,44 @@ test('Level 3: mud slows the nugget down', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test('Level 3: a scarecrow, a cow, a crate and three mud dashes set every farm animal loose', async ({ page }) => {
+  const errors = await open(page, '?level=3&autostart&seed=1');
+  await page.waitForFunction(() => (window as any).__nugget.state.status === 'playing', undefined, { timeout: 15_000 });
+  const place = (x: number, y: number) => page.evaluate(([x, y]) => {
+    const s = (window as any).__nugget.state;
+    for (const k of ['red', 'orange', 'teal', 'green', 'purple', 'blue', 'pink']) s.unlocked.add(k);
+    s.player.pos = { x, y };
+    s.player.invuln = 8;
+    for (const c of s.chasers) { c.mode = 'patrol'; c.path = []; c.pos = { x: 28.5, y: 6.5 }; } // keep them busy in the pen
+  }, [x, y]);
+  const touch = async (x: number, y: number, key: string, egg: string, count: string) => {
+    await place(x, y);
+    await page.keyboard.down(key);
+    await expect(page.locator('.toast.secret').last()).toContainText(egg, { timeout: 10_000 });
+    await page.keyboard.up(key);
+    await expect(page.locator('#hud-secrets')).toContainText(count);
+  };
+  await touch(52.5, 27.6, 'ArrowUp', 'little crow', '1/4');
+  await touch(16, 12.6, 'ArrowUp', 'chocolate milk', '2/4');
+  await touch(53.5, 6.6, 'ArrowDown', 'baby chick', '3/4');
+  // three dashes in the mud
+  for (let i = 1; i <= 3; i++) {
+    await place(18.5, 23.5);
+    await page.keyboard.down('ArrowRight');
+    await page.keyboard.press('Space');
+    await page.waitForFunction((n) => (window as any).__nugget.state.mudDashes >= n, i);
+    await page.keyboard.up('ArrowRight');
+    if (i < 3) await page.waitForFunction(() => (window as any).__nugget.state.player.dashCd <= 0);
+  }
+  await expect(page.locator('#floor-banner')).toHaveText('Animal stampede!');
+  await expect(page.locator('.toast.secret').last()).toContainText('All the farm animals just broke out');
+  await expect(page.locator('#hud-secrets')).toContainText('4/4');
+  await expect(page.locator('#feast-btn')).toBeHidden();
+  expect(await page.evaluate(() => (window as any).__nugget.state.happy)).toBe(true);
+  await page.waitForTimeout(800); // let the animals run around for a bit
+  expect(errors).toEqual([]);
+});
+
 test('Level 3: out on the country road the Farmer comes after the nugget on his tractor, then with his rake', async ({ page }) => {
   const errors = await open(page, '?level=3&autostart&nofamily&seed=1');
   await page.waitForFunction(() => (window as any).__nugget.state.status === 'playing');

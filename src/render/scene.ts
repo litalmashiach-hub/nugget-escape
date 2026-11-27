@@ -7,7 +7,7 @@ import { THREE, cutUniforms, canvasTexture, glowTexture, labelTexture, GEO } fro
 import { buildFloor, type FloorView } from './world';
 import { buildFurniture } from './furniture';
 import { CART_REACH } from '../game/carts';
-import { SecretFx, FoodFx, SECRET_COLORS } from './secrets';
+import { SecretFx, FoodFx, StampedeFx, SECRET_COLORS } from './secrets';
 import { NuggetModel, PersonModel, BossModel, FarmerBossModel, drumstick, pinkSlip, firedStamp, faceAngle, ketchupBottle, makeFamily, type FamilyModel } from './characters';
 import { OfficeCutscene } from './office';
 import { Cutscene, BossCutscene, CAM_OFFSET } from './cutscene';
@@ -162,6 +162,7 @@ export class Scene {
   readonly lab = new LabTripCutscene();
   private secretFx = new SecretFx();
   private foodFx = new FoodFx();
+  private stampedeFx = new StampedeFx();
   private gus = new BossModel();
   private manager = new BossModel('manager');
   /** Level 3: the Farmer on his tractor, then with his long rake. */
@@ -241,8 +242,8 @@ export class Scene {
       }
     }
 
-    for (const k of ['!', '?', 'yum', 'star'] as const) this.bubbleTex[k] = canvasTexture(bakeBubble(k));
-    this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.street.group, this.farm.group, this.lab.group, this.gus.root, this.manager.root, this.officeCut.group, this.secretFx.group, this.foodFx.group);
+    for (const k of ['!', '?', 'yum', 'star', 'ohno'] as const) this.bubbleTex[k] = canvasTexture(bakeBubble(k));
+    this.scene.add(this.nugget.root, this.particles.mesh, this.cutscene.group, this.street.group, this.farm.group, this.lab.group, this.gus.root, this.manager.root, this.officeCut.group, this.secretFx.group, this.foodFx.group, this.stampedeFx.group);
     this.gus.root.visible = false;
     this.manager.root.visible = false;
     this.farmerBoss.root.visible = false;
@@ -388,6 +389,7 @@ export class Scene {
     this.bossCut.reset();
     this.officeCut.reset();
     this.secretFx.reset();
+    this.stampedeFx.reset();
   }
 
   snapCamera() {
@@ -475,6 +477,16 @@ export class Scene {
       }
       case 'employeeOfMonth':
         for (const c of state.chasers) if (c.floor === state.player.floor) this.burst(c.pos.x, 1.4, c.pos.y, '#f5c518', 18);
+        break;
+      case 'stampede':
+        for (const c of state.chasers) if (c.floor === state.player.floor) this.burst(c.pos.x, 1.2, c.pos.y, '#c89a5e', 18);
+        break;
+      case 'mudDash':
+        // a big muddy splash
+        for (let i = 0; i < 26; i++) {
+          const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 2;
+          this.particles.emit(e.x, 0.1, e.y, { vx: Math.cos(a) * sp, vy: 2 + Math.random() * 2.5, vz: Math.sin(a) * sp, grav: 9, life: 0.8, size: 0.08, color: i % 3 ? '#5e4026' : '#7a5533' });
+        }
         break;
       case 'chomp':
         if (e.floor === state.player.floor) for (let i = 0; i < 10; i++) this.particles.emit(e.x, 0.15, e.y, { vx: (Math.random() - 0.5) * 2, vy: 1 + Math.random() * 1.5, vz: (Math.random() - 0.5) * 2, grav: 7, life: 0.6, size: 0.05, color: '#e0a03c' });
@@ -704,7 +716,11 @@ export class Scene {
       this.foodFx.update(state, this.time);
       this.secretFx.group.visible = true;
       this.secretFx.update(state, dt, this.time, (x, y, z, color) => this.particles.emit(x, y, z, { vy: 0.4, life: 0.9, size: 0.045, color }));
-    } else this.secretFx.group.visible = false;
+      this.stampedeFx.update(state, dt, this.time);
+    } else {
+      this.secretFx.group.visible = false;
+      this.stampedeFx.group.visible = false;
+    }
     if (!story) this.renderBossFight(state, dt, bossIntro);
     this.renderCarts(state, dt, !story && !bossIntro);
 
@@ -1092,8 +1108,10 @@ export class Scene {
       // Employee of the Month (Level 2): no vision cones, just a big gold star and some sparkles
       cv.cone.visible = !feasting && !state.happy;
       if (!feasting && !state.happy) this.updateCone(state, c, cv);
-      if (state.happy && Math.random() < dt * 3) this.particles.emit(c.pos.x + (Math.random() - 0.5) * 0.5, cv.model.height * (0.5 + Math.random() * 0.6), c.pos.y + (Math.random() - 0.5) * 0.5, { vy: 0.5, life: 0.9, size: 0.05, color: '#f5c518' });
-      const kind = state.happy ? 'star' : chewing ? 'yum' : c.mode === 'alert' || (c.mode === 'chase' && c.seesPlayer) ? '!' : c.mode === 'search' || c.mode === 'chase' ? '?' : '';
+      // Animal stampede (Level 3): kicked-up dust instead of sparkles, and an "EEK!" bubble
+      const stampede = state.level.secrets === 'stampede';
+      if (state.happy && Math.random() < dt * 3) this.particles.emit(c.pos.x + (Math.random() - 0.5) * 0.5, stampede ? 0.15 : cv.model.height * (0.5 + Math.random() * 0.6), c.pos.y + (Math.random() - 0.5) * 0.5, { vy: 0.5, life: 0.9, size: 0.05, color: stampede ? '#c8a26b' : '#f5c518' });
+      const kind = state.happy ? (stampede ? 'ohno' : 'star') : chewing ? 'yum' : c.mode === 'alert' || (c.mode === 'chase' && c.seesPlayer) ? '!' : c.mode === 'search' || c.mode === 'chase' ? '?' : '';
       const showKind = state.status === 'caught' && state.caughtBy === c.def.name ? 'yum' : kind;
       if (showKind) {
         if (showKind !== cv.bubbleKind) { cv.pop = 0; cv.bubble.material.map = this.bubbleTex[showKind]; }

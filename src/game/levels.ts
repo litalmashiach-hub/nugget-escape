@@ -584,6 +584,10 @@ export const FARM: FloorDef[] = [
       f('barrel', 45, 8, 1, 1, 'solid'),
       f('wheelbarrow', 50, 6, 1, 1, 'hide'),
       f('woodpile', 50, 1, 2, 1, 'solid'),
+      // three wooden crates in the corner (the middle one has a secret inside)
+      f('boxes', 52, 8, 1, 1, 'solid'),
+      f('boxes', 53, 8, 1, 1, 'solid'),
+      f('boxes', 54, 8, 1, 1, 'solid'),
       // Farmyard
       f('pigsty', 2, 15, 5, 4, 'solid'),
       f('tractor', 8, 21, 3, 2, 'hide'),
@@ -943,9 +947,10 @@ export interface LevelDef {
   intro?: 'walk' | 'drop';
   /**
    * Easter eggs, and what finding them all does: in the house, nugget rain;
-   * in the grocery store, every employee becomes Employee of the Month.
+   * in the grocery store, every employee becomes Employee of the Month;
+   * on the farm, all the animals escape and the farm folk are too busy catching them.
    */
-  secrets: false | 'rain' | 'employee';
+  secrets: false | 'rain' | 'employee' | 'stampede';
   /** Shoppers charge with their carts when the nugget gets near a key. */
   carts?: boolean;
 }
@@ -972,7 +977,7 @@ export const LEVEL3: LevelDef = {
   goal: 'road',
   // caught: the farmer puts the nugget back in the chicken pen
   shelf: { floor: 0, x: 28.5, y: 6.5 }, caughtTo: 'back in the pen',
-  outside: 'farm', secrets: false, intro: 'drop',
+  outside: 'farm', secrets: 'stampede', intro: 'drop',
 };
 
 export const LEVEL4: LevelDef = {

@@ -1,18 +1,20 @@
 import type { Vec, FurnitureKind } from './types';
-import { STORE } from './levels';
+import { STORE, FARM } from './levels';
 
 /**
  * Easter eggs. Walk up to the right piece of furniture and a little surprise
- * pops out. Level 1 (the house) has five, Level 2 (the grocery store) has three.
+ * pops out. Level 1 (the house) has five, Level 2 (the grocery store) has three,
+ * Level 3 (the farm) has four: one scarecrow, one cow, one crate, and dashing in the mud.
  */
-export type SecretId = 'egg' | 'book' | 'duck' | 'box' | 'dentures' | 'cart' | 'grapes' | 'crate';
+export type SecretId = 'egg' | 'book' | 'duck' | 'box' | 'dentures' | 'cart' | 'grapes' | 'crate'
+  | 'crow' | 'milk' | 'chick' | 'piggy';
 
 export interface Rect { x: number; y: number; w: number; h: number }
 
 export interface SecretDef {
   id: SecretId;
   /** The level it is hidden in. */
-  level: 1 | 2;
+  level: 1 | 2 | 3;
   /** What the nugget finds, e.g. "an egg". */
   name: string;
   /** Where it was hiding, e.g. "in the fridge". */
@@ -23,6 +25,11 @@ export interface SecretDef {
   rects: Rect[];
   /** Furniture kinds it hides in, kept in sync with levels.ts by a test. */
   furniture: FurnitureKind[];
+  /**
+   * Found by dashing this many times while standing in the mud instead of by
+   * touching something. `rects` are then the mud puddles (where it twinkles).
+   */
+  mudDashes?: number;
 }
 
 const r = (x: number, y: number, w: number, h: number): Rect => ({ x, y, w, h });
@@ -37,6 +44,14 @@ function storeRects(kinds: FurnitureKind[], area: Rect = r(0, 0, 999, 999)): Rec
 /** The Stockroom (behind the orange door) on the store floor. */
 export const STOCKROOM_AREA = r(21, 1, 19, 9);
 
+/** Level 3: every mud puddle on the farm, as rectangles. */
+function farmMud(): Rect[] {
+  return (FARM[0].mud ?? []).map(([x, y, w, h]) => r(x, y, w, h));
+}
+
+/** Dashes in the mud it takes to find the piggy. */
+export const MUD_DASHES = 3;
+
 export const SECRETS: SecretDef[] = [
   // Level 1: the house
   { id: 'egg', level: 1, name: 'an egg', where: 'in the fridge', emoji: '🥚', floor: 0, rects: [r(10, 1, 1, 2)], furniture: ['fridge'] },
@@ -48,6 +63,11 @@ export const SECRETS: SecretDef[] = [
   { id: 'cart', level: 2, name: 'a grocery cart', where: 'from a chatty checkout register', emoji: '🛒', floor: 0, rects: storeRects(['checkout']), furniture: ['checkout'] },
   { id: 'grapes', level: 2, name: 'a box of grapes', where: 'on a store shelf', emoji: '🍇', floor: 0, rects: storeRects(['shelf']), furniture: ['shelf'] },
   { id: 'crate', level: 2, name: 'a box', where: 'on the shelves in the Stockroom', emoji: '📦', floor: 0, rects: storeRects(['boxes', 'rack'], STOCKROOM_AREA), furniture: ['boxes', 'rack'] },
+  // Level 3: the farm. Only one scarecrow, one cow and one crate are the special ones.
+  { id: 'crow', level: 3, name: 'a little crow', where: "hiding in the Cornfield scarecrow's hat", emoji: '🐦', floor: 0, rects: [r(52, 26, 1, 1)], furniture: ['scarecrow'] },
+  { id: 'milk', level: 3, name: 'chocolate milk', where: 'from the brown cow in the barn', emoji: '🥛', floor: 0, rects: [r(15, 11, 2, 1)], furniture: ['cow'] },
+  { id: 'chick', level: 3, name: 'a baby chick', where: 'in a crate in the Tool Shed', emoji: '🐣', floor: 0, rects: [r(53, 8, 1, 1)], furniture: ['boxes'] },
+  { id: 'piggy', level: 3, name: 'a muddy piggy', where: 'splashing in the mud', emoji: '🐷', floor: 0, rects: farmMud(), furniture: [], mudDashes: MUD_DASHES },
 ];
 
 /** The easter eggs hidden in one level. */

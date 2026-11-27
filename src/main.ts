@@ -475,8 +475,14 @@ async function boot() {
         sound.secret();
         const n = state.secrets.size, total = secretsFor(state.level.id).length;
         const got = e.id === 'cart' ? `"Beep boop! Have a nice day!" The checkout register gave you ${sd.name}`
-          : e.id === 'grapes' ? `You got ${sd.name} ${sd.where}` : `You found ${sd.name} ${sd.where}`;
-        if (n === total && state.level.secrets === 'employee') break; // the Employee of the Month toast says it all
+          : e.id === 'grapes' ? `You got ${sd.name} ${sd.where}`
+          : e.id === 'crow' ? `"Caw caw!" You found ${sd.name} ${sd.where}`
+          : e.id === 'milk' ? `"Moooo!" You got ${sd.name} ${sd.where}`
+          : e.id === 'chick' ? `Peep peep! ${sd.name[0].toUpperCase()}${sd.name.slice(1)} hatched ${sd.where}`
+          : e.id === 'piggy' ? `Oink oink! ${sd.name[0].toUpperCase()}${sd.name.slice(1)} jumped out, ${sd.where} with you`
+          : `You found ${sd.name} ${sd.where}`;
+        // the Employee of the Month and stampede toasts say it all
+        if (n === total && (state.level.secrets === 'employee' || state.level.secrets === 'stampede')) break;
         hud.toast(n === total
           ? `<span class="em">${sd.emoji}</span> ${got}! That's every easter egg! Press <b>NUGGET RAIN</b>!`
           : `<span class="em">${sd.emoji}</span> Easter egg! ${got}. (${n}/${total})`, 'secret', 3200);
@@ -491,6 +497,15 @@ async function boot() {
         sound.feast();
         hud.banner('Employee of the Month!');
         hud.toast('<span class="em">🛒🍇📦</span> Every easter egg found! The whole staff just became Employee of the Month. They are so happy they forgot all about chasing you!', 'secret', 4800);
+        break;
+      case 'stampede':
+        sound.feast();
+        hud.banner('Animal stampede!');
+        hud.toast('<span class="em">🐦🥛🐣🐷</span> Every easter egg found! All the farm animals just broke out! The Farmer, Hank and the dogs are so busy chasing cows, pigs and hens that they forgot all about you!', 'secret', 5200);
+        break;
+      case 'mudDash':
+        sound.step_();
+        if (e.count === 2) hud.toast('Splish splash! Something in the mud just went <i>oink</i>...', 'secret', 2200);
         break;
       case 'feastEnd':
         hud.toast('Snack time is over. Careful, they are hungry for more!', 'danger', 2600);
@@ -683,7 +698,7 @@ async function boot() {
         if (hasNext) { unlockLevel(next); openLevels.add(next); }
         setTimeout(() => {
           if (mode !== 'ended') return;
-          $('win-eyebrow').textContent = lv === 4 ? 'Top secret!' : lv === 3 ? 'Free range!' : lv === 2 ? (state.happy ? 'Everyone is Employee of the Month!' : 'Employee of the month? Not today!') : 'Freedom!';
+          $('win-eyebrow').textContent = lv === 4 ? 'Top secret!' : lv === 3 ? (state.happy ? 'The animals are free too!' : 'Free range!') : lv === 2 ? (state.happy ? 'Everyone is Employee of the Month!' : 'Employee of the month? Not today!') : 'Freedom!';
           $('win-title').textContent = lv === 4 ? 'You found the secret files!' : lv === 3 ? (state.boss ? 'You beat the Farmer!' : 'You escaped the farm!') : lv === 2 ? (state.boss ? 'You beat the Manager!' : "You made it to the Manager's Office!") : 'You escaped!';
           const sub = $('win-sub');
           sub.hidden = lv === 1 && !firstWin;
