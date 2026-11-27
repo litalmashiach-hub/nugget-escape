@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createGame, update, startFeast, canFeast, INTRO_TIME, type GameState, type Input } from '../../src/game/state';
-import { SECRETS, secretsFor, STOCKROOM_AREA, FEAST_TIME, FEAST_RECHARGE } from '../../src/game/secrets';
-import { STORE, LEVELS } from '../../src/game/levels';
+import { createGame, update, startFeast, canFeast, INTRO_TIME, DASH_COOLDOWN, type GameState, type Input } from '../../src/game/state';
+import { SECRETS, secretsFor, STOCKROOM_AREA, FEAST_TIME, FEAST_RECHARGE, MUD_DASHES } from '../../src/game/secrets';
+import { STORE, FARM, LEVELS } from '../../src/game/levels';
 
 const DT = 1 / 60;
 
@@ -27,6 +27,11 @@ describe('easter eggs', () => {
     for (const sd of SECRETS) {
       const floors = LEVELS[sd.level].floors;
       expect(sd.rects.length, sd.id).toBeGreaterThan(0);
+      if (sd.mudDashes) {
+        // found by dashing in the mud: it twinkles over every mud puddle
+        expect(sd.rects).toEqual((floors[sd.floor].mud ?? []).map(([x, y, w, h]) => ({ x, y, w, h })));
+        continue;
+      }
       for (const rect of sd.rects) {
         const f = floors[sd.floor].furniture.find((f) => sd.furniture.includes(f.kind) && f.x === rect.x && f.y === rect.y);
         expect(f, sd.id).toBeDefined();
@@ -195,5 +200,110 @@ describe('level 2 easter eggs: Employee of the Month', () => {
     const s = store(7.5, 20.5, true);
     expect(s.happy).toBe(false);
     for (const lv of [1, 3] as const) expect(LEVELS[lv].secrets).not.toBe('employee');
+  });
+});
+
+describe('level 3 easter eggs: the animal stampede', () => {
+  function farm(x: number, y: number, family = false) {
+    const s = createGame('normal', { level: 3, noFamily: !family, skipIntro: true, seed: 1 });
+    for (const k of ['red', 'orange', 'teal', 'green', 'purple', 'blue', 'pink'] as const) s.unlocked.add(k);
+    s.player.pos = { x, y };
+    return s;
+  }
+  const up: Input = { mx: 0, my: -1, dash: false };
+  const down: Input = { mx: 0, my: 1, dash: false };
+  const still: Input = { mx: 0, my: 0, dash: false };
+  /** Dash once to the right from (x, y), then wait for the dash to recharge. */
+  function dashFrom(s: GameState, x: number, y: number) {
+    s.player.pos = { x, y };
+    const found = walk(s, { mx: 1, my: 0, dash: true }, DT);
+    return [...found, ...walk(s, still, DASH_COOLDOWN + 0.1)];
+  }
+
+  it('the farm has four: a crow, chocolate milk, a chick and a piggy', () => {
+    expect(secretsFor(3).map((s) => s.id)).toEqual(['crow', 'milk', 'chick', 'piggy']);
+    expect(LEVELS[3].secrets).toBe('stampede');
+    // only one scarecrow, one cow and one crate out of several are special
+    const count = (k: string) => FARM[0].furniture.filter((f) => f.kind === k).length;
+    expect(count('scarecrow')).toBeGreaterThan(1);
+    expect(count('cow')).toBeGreaterThan(1);
+    expect(count('boxes')).toBeGreaterThan(1);
+    for (const id of ['crow', 'milk', 'chick'] as const) expect(secretsFor(3).find((s) => s.id === id)!.rects).toHaveLength(1);
+  });
+
+  it('the scarecrow in the Cornfield has a crow in its hat (the other scarecrows do not)', () => {
+    expect(walk(farm(52.5, 27.6), up, 1.5)).toEqual(['crow']);
+    expect(walk(farm(40.5, 4.6), up, 1.5)).toEqual([]); // Vegetable Garden scarecrow
+    expect(walk(farm(25.5, 30.6), up, 1.5)).toEqual([]); // Pumpkin Patch scarecrow
+  });
+
+  it('the brown cow in the barn gives chocolate milk (the other cows do not)', () => {
+    expect(walk(farm(16, 12.6), up, 1.5)).toEqual(['milk']);
+    expect(walk(farm(3, 12.6), up, 1.5)).toEqual([]);
+    expect(walk(farm(47, 15.6), up, 1.5)).toEqual([]); // the cow out in the farmyard
+  });
+
+  it('the middle crate in the Tool Shed has a baby chick (the crates next to it do not)', () => {
+    expect(walk(farm(53.5, 6.6), down, 1.5)).toEqual(['chick']);
+    expect(walk(farm(52.4, 6.6), down, 1.5)).toEqual([]);
+  });
+
+  it(`dashing in the mud ${MUD_DASHES} times finds a muddy piggy`, () => {
+    const s = farm(18.5, 23.5);
+    const seen: number[] = [];
+    let found: string[] = [];
+    for (let i = 0; i < MUD_DASHES; i++) {
+      s.player.pos = { x: 18.5, y: 23.5 };
+      for (let t = 0; t < DT * 1.5; t += DT) {
+        update(s, { mx: 1, my: 0, dash: true }, DT);
+        for (const e of s.events) {
+          if (e.type === 'mudDash') seen.push(e.count);
+          if (e.type === 'secret') found.push(e.id);
+        }
+      }
+      if (i < MUD_DASHES - 1) expect(found).toEqual([]);
+      found = [...found, ...walk(s, still, DASH_COOLDOWN + 0.1)];
+    }
+    expect(seen).toEqual([1, 2, 3]);
+    expect(found).toEqual(['piggy']);
+    expect(s.secrets.has('piggy')).toBe(true);
+  });
+
+  it('dashing on dry ground does not count, and walking through mud is not enough', () => {
+    const s = farm(30.5, 16.5);
+    for (let i = 0; i < 4; i++) expect(dashFrom(s, 30.5, 16.5)).toEqual([]);
+    expect(s.mudDashes).toBe(0);
+    s.player.pos = { x: 16.6, y: 23.5 };
+    expect(walk(s, { mx: 1, my: 0, dash: false }, 3)).toEqual([]);
+  });
+
+  it('finding all four lets every animal loose, and nobody chases the nugget for the rest of the level', () => {
+    const s = farm(52.5, 27.6, true);
+    for (const id of ['milk', 'chick', 'piggy'] as const) s.secrets.add(id);
+    const farmer = s.chasers.find((c) => c.def.id === 'farmer')!;
+    farmer.mode = 'chase';
+    farmer.lastSeen = { ...s.player.pos };
+    const seen: string[] = [];
+    for (let t = 0; t < 1.5; t += DT) { update(s, up, DT); seen.push(...s.events.map((e) => e.type)); }
+    expect(seen).toContain('stampede');
+    expect(seen).not.toContain('employeeOfMonth');
+    expect(s.happy).toBe(true);
+    expect(s.chasers.some((c) => c.mode === 'chase' || c.mode === 'alert')).toBe(false);
+    // The Farmer stands right next to the nugget, looking at it, and is too busy to care.
+    farmer.pos = { x: s.player.pos.x, y: s.player.pos.y + 0.9 };
+    farmer.facing = -Math.PI / 2;
+    const later: string[] = [];
+    for (let t = 0; t < 20; t += DT) { update(s, still, DT); later.push(...s.events.map((e) => e.type)); }
+    expect(later).not.toContain('alert');
+    expect(later).not.toContain('caught');
+    expect(s.lives).toBe(3);
+  });
+
+  it('the farm folk still chase before all four are found', () => {
+    const s = farm(52.5, 27.6, true);
+    for (const id of ['milk', 'chick'] as const) s.secrets.add(id);
+    walk(s, up, 1.5);
+    expect(s.secrets.size).toBe(3);
+    expect(s.happy).toBe(false);
   });
 });

@@ -294,9 +294,9 @@ export function bakeRadial(size: number, inner: string, outer: string, scale = 1
   return c;
 }
 
-export function bakeBubble(kind: '!' | '?' | 'zzz' | 'yum' | 'star', scale = 3) {
+export function bakeBubble(kind: '!' | '?' | 'zzz' | 'yum' | 'star' | 'ohno', scale = 3) {
   const { c, ctx } = makeCanvas(34, 38, scale);
-  const col = kind === '!' ? '#e8424a' : kind === '?' ? '#3d7df0' : kind === 'yum' ? '#f68b2a' : kind === 'star' ? '#e0a800' : '#7a7a9a';
+  const col = kind === '!' ? '#e8424a' : kind === '?' ? '#3d7df0' : kind === 'yum' ? '#f68b2a' : kind === 'star' ? '#e0a800' : kind === 'ohno' ? '#9b5de5' : '#7a7a9a';
   withShadow(ctx, 4, 2, 0.35, () => {
     ctx.fillStyle = '#fff';
     ctx.beginPath();
@@ -308,7 +308,7 @@ export function bakeBubble(kind: '!' | '?' | 'zzz' | 'yum' | 'star', scale = 3) 
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(17, 16, 14, 0, Math.PI * 2); ctx.stroke();
   ctx.fillStyle = col;
-  ctx.font = `900 ${kind === 'yum' ? 10 : 20}px "Lilita One", "Arial Rounded MT Bold", sans-serif`;
+  ctx.font = `900 ${kind === 'yum' || kind === 'ohno' ? 10 : 20}px "Lilita One", "Arial Rounded MT Bold", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   if (kind === 'star') {
@@ -324,7 +324,7 @@ export function bakeBubble(kind: '!' | '?' | 'zzz' | 'yum' | 'star', scale = 3) 
     ctx.stroke();
     return c;
   }
-  ctx.fillText(kind === 'yum' ? 'YUM!' : kind === 'zzz' ? 'z' : kind, 17, 17);
+  ctx.fillText(kind === 'ohno' ? 'EEK!' : kind === 'yum' ? 'YUM!' : kind === 'zzz' ? 'z' : kind, 17, 17);
   return c;
 }
 

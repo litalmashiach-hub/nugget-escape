@@ -44,6 +44,10 @@ export type GameEvent =
   | { type: 'feast' }
   /** Level 2: all three easter eggs found, so every employee is Employee of the Month. */
   | { type: 'employeeOfMonth' }
+  /** Level 3: all four easter eggs found, so every farm animal escapes and nobody chases the nugget. */
+  | { type: 'stampede' }
+  /** Level 3: dashed in the mud (count so far, toward the piggy easter egg). */
+  | { type: 'mudDash'; count: number; x: number; y: number }
   | { type: 'feastEnd' }
   | { type: 'chomp'; id: string; floor: number; x: number; y: number }
   | { type: 'unlock'; color: KeyColor; x: number; y: number }
@@ -199,6 +203,8 @@ export interface GameState {
   secrets: Set<SecretId>;
   /** Level 2: every employee is Employee of the Month and too happy to chase anyone. */
   happy: boolean;
+  /** Level 3: times the nugget has dashed while in the mud (three finds the piggy). */
+  mudDashes: number;
   /** Nugget rain: seconds left, seconds until it can be used again, and the nuggets on the floors. */
   feastTime: number;
   feastCd: number;
@@ -290,6 +296,7 @@ export function createGame(difficulty: Difficulty = 'normal', opts: GameOptions 
     timesSpotted: 0,
     secrets: new Set(),
     happy: false,
+    mudDashes: 0,
     feastTime: 0,
     feastCd: 0,
     food: [],
@@ -562,7 +569,7 @@ export function startFeast(state: GameState, rand: () => number = state.rand) {
  * is named Employee of the Month. They are so happy that they forget all about
  * the nugget for the rest of the level and just wander around beaming.
  */
-export function employeeOfTheMonth(state: GameState) {
+export function employeeOfTheMonth(state: GameState, event: 'employeeOfMonth' | 'stampede' = 'employeeOfMonth') {
   if (state.happy) return;
   state.happy = true;
   for (const c of state.chasers) {
@@ -571,7 +578,27 @@ export function employeeOfTheMonth(state: GameState) {
     c.seesPlayer = false;
     c.lastSeen = null;
   }
-  state.events.push({ type: 'employeeOfMonth' });
+  state.events.push({ type: event });
+}
+
+/**
+ * Level 3: the nugget found the crow, the chocolate milk, the chick and the piggy,
+ * so every animal on the farm breaks out at once. The Farmer, Hank and the dogs are
+ * so busy running after cows, pigs and hens that they forget all about the nugget
+ * for the rest of the level.
+ */
+export function animalStampede(state: GameState) {
+  employeeOfTheMonth(state, 'stampede');
+}
+
+/** Marks an easter egg found, and sets off the level's reward once they are all found. */
+function findSecret(state: GameState, id: SecretId, x: number, y: number) {
+  if (state.secrets.has(id)) return;
+  state.secrets.add(id);
+  state.events.push({ type: 'secret', id, x, y });
+  if (state.secrets.size !== secretsFor(state.level.id).length) return;
+  if (state.level.secrets === 'employee') employeeOfTheMonth(state);
+  else if (state.level.secrets === 'stampede') animalStampede(state);
 }
 
 function updateFeast(state: GameState, dt: number) {
@@ -678,6 +705,13 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
     p.dashTime = DASH_TIME;
     p.dashCd = DASH_COOLDOWN;
     state.events.push({ type: 'dash' });
+    // Easter egg (Level 3): dash in the mud three times and a muddy piggy jumps in with you
+    const mud = state.level.secrets ? secretsFor(state.level.id).find((sd) => sd.mudDashes && sd.floor === p.floor) : undefined;
+    if (mud && !state.secrets.has(mud.id) && map.isMud(Math.floor(p.pos.x), Math.floor(p.pos.y))) {
+      state.mudDashes++;
+      state.events.push({ type: 'mudDash', count: state.mudDashes, x: p.pos.x, y: p.pos.y });
+      if (state.mudDashes >= mud.mudDashes!) findSecret(state, mud.id, p.pos.x, p.pos.y);
+    }
   }
 
   const mudTx = Math.floor(p.pos.x), mudTy = Math.floor(p.pos.y);
@@ -715,11 +749,9 @@ function updatePlayer(state: GameState, input: Input, dt: number) {
   if (state.level.secrets) {
     const all = secretsFor(state.level.id);
     for (const sd of all) {
-      if (state.secrets.has(sd.id) || !touchingSecret(sd, p.floor, p.pos, PLAYER_RADIUS)) continue;
-      state.secrets.add(sd.id);
+      if (sd.mudDashes || state.secrets.has(sd.id) || !touchingSecret(sd, p.floor, p.pos, PLAYER_RADIUS)) continue;
       const c = closestPoint(sd, p.pos);
-      state.events.push({ type: 'secret', id: sd.id, x: c.x, y: c.y });
-      if (state.level.secrets === 'employee' && state.secrets.size === all.length) employeeOfTheMonth(state);
+      findSecret(state, sd.id, c.x, c.y);
     }
   }
 
